@@ -6,7 +6,7 @@ import { LumiereType } from '@/app/components/lib/tokens';
 export default function HomePage() {
   const { theme: t } = useTweaks();
   return (
-    <div style={{ paddingBottom: 100 }}>
+    <div>
       <div style={{ padding: '8px 20px 24px', borderBottom: `1px solid ${t.line}` }}>
         <div style={{
           display: 'flex', justifyContent: 'space-between',

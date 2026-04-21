@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
-import type { Theme } from '@/lib/tokens';
-import { LumiereType } from '@/lib/tokens';
+import type { Theme } from '@/app/components/lib/tokens';
+import { LumiereType } from '@/app/components/lib/tokens';
 
 export type CryStyle = 'bar' | 'dots' | 'wave';
 

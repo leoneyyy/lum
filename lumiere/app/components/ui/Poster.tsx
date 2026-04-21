@@ -1,7 +1,7 @@
 'use client';
-import type { Theme } from '@/lib/tokens';
-import { LumiereType } from '@/lib/tokens';
-import type { Film } from '@/lib/types';
+import type { Theme } from '@/app/components/lib/tokens';
+import { LumiereType } from '@/app/components/lib/tokens';
+import type { Film } from '@/app/components/lib/types';
 
 interface PosterProps {
   film: Film;

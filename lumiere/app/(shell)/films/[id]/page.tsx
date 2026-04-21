@@ -1,0 +1,239 @@
+'use client';
+import React from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useTweaks } from '@/app/components/TweaksProvider';
+import { LumiereType, DEFAULT_DIMS, LumiereVoice } from '@/app/components/lib/tokens';
+import type { DimKey } from '@/app/components/lib/tokens';
+import { getFilm } from '@/app/components/lib/api';
+import type { Film, RatingMap } from '@/app/components/lib/types';
+import { Poster } from '@/app/components/ui/Poster';
+import { CryMeter } from '@/app/components/ui/CryMeter';
+import { RatingRow, Eyebrow } from '@/app/components/ui/Primitives';
+import { saveEntry, useFilmEntries, deleteEntry } from '@/app/components/lib/logStore';
+
+export default function FilmDetailPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const id = decodeURIComponent(params.id);
+  const { theme: t, tweaks } = useTweaks();
+  const [loaded, setLoaded] = React.useState<{ id: string; film: Film | null; err: string | null } | null>(null);
+  const entries = useFilmEntries(id);
+
+  React.useEffect(() => {
+    let cancel = false;
+    getFilm(id)
+      .then(f => { if (!cancel) setLoaded({ id, film: f, err: f ? null : 'not found' }); })
+      .catch(e => { if (!cancel) setLoaded({ id, film: null, err: e instanceof Error ? e.message : 'load failed' }); });
+    return () => { cancel = true; };
+  }, [id]);
+
+  const loading = loaded?.id !== id;
+  const film = loading ? null : loaded?.film ?? null;
+  const err = loading ? null : loaded?.err ?? null;
+
+  const [open, setOpen] = React.useState(false);
+  const [cry, setCry] = React.useState(0);
+  const [ratings, setRatings] = React.useState<RatingMap>({});
+  const [note, setNote] = React.useState('');
+
+  const activeDims = React.useMemo(
+    () => DEFAULT_DIMS.filter(d => tweaks.dims.includes(d.key as DimKey)),
+    [tweaks.dims],
+  );
+
+  const submit = () => {
+    if (!film) return;
+    saveEntry({ filmId: film.id, cry, ratings, note });
+    setOpen(false);
+    setCry(0); setRatings({}); setNote('');
+  };
+
+  if (loading) return <CenterNote t={t} text="loading…" />;
+  if (err || !film) return <CenterNote t={t} text={err || 'not found'} />;
+
+  return (
+    <div>
+      {film.backdropUrl && (
+        <div style={{
+          position: 'relative', height: 220, overflow: 'hidden',
+          borderBottom: `1px solid ${t.line}`,
+        }}>
+          <img src={film.backdropUrl} alt="" style={{
+            width: '100%', height: '100%', objectFit: 'cover',
+            filter: 'brightness(0.55) saturate(0.85)',
+          }} />
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(180deg, transparent 40%, ${t.bg})`,
+          }} />
+        </div>
+      )}
+
+      <div style={{ padding: '20px 20px 12px' }}>
+        <button onClick={() => router.back()} style={{
+          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+          textTransform: 'uppercase', color: t.muted, marginBottom: 14,
+        }}>← back</button>
+
+        <div style={{ display: 'flex', gap: 16 }}>
+          <Poster film={film} size="md" t={t} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: LumiereType.display, fontSize: 32, lineHeight: 1,
+              color: t.cream, letterSpacing: -0.8, marginBottom: 10,
+            }}>{film.title}</div>
+            <MetaRow t={t} items={[
+              film.year ? String(film.year) : null,
+              film.dir ? `dir. ${film.dir}` : null,
+              film.runtime ? `${film.runtime}m` : null,
+              film.kind,
+            ].filter(Boolean) as string[]} />
+            {film.tags?.length ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                {film.tags.slice(0, 6).map(tag => (
+                  <div key={tag} style={{
+                    padding: '3px 8px', border: `1px solid ${t.line}`,
+                    fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4,
+                    textTransform: 'uppercase', color: t.creamDim,
+                  }}>{tag}</div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {film.synopsis && (
+          <div style={{
+            fontFamily: LumiereType.body, fontSize: 16, lineHeight: 1.5,
+            color: t.creamDim, fontStyle: 'italic', marginTop: 20,
+          }}>{film.synopsis}</div>
+        )}
+      </div>
+
+      <div style={{ padding: '8px 20px 20px' }}>
+        {!open ? (
+          <button onClick={() => setOpen(true)} style={{
+            display: 'block', width: '100%', padding: '16px 0',
+            background: t.cream, color: t.bg, border: 'none', cursor: 'pointer',
+            fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 3,
+            textTransform: 'uppercase',
+          }}>log this →</button>
+        ) : (
+          <div style={{
+            border: `1px solid ${t.line}`, padding: 18, marginTop: 4,
+            background: t.surface,
+          }}>
+            <Eyebrow num="◐" label="cry meter" t={t} style={{ marginBottom: 12 }} />
+            <CryMeter
+              value={cry}
+              t={t}
+              style={tweaks.cryStyle}
+              large
+              interactive
+              onChange={setCry}
+            />
+            <div style={{ height: 18 }} />
+
+            <Eyebrow num="◑" label="dimensions" t={t} style={{ marginBottom: 6 }} />
+            <div>
+              {activeDims.map(d => (
+                <RatingRow
+                  key={d.key}
+                  label={d.label}
+                  value={ratings[d.key as keyof RatingMap] || 0}
+                  t={t}
+                  interactive
+                  onChange={v => setRatings(r => ({ ...r, [d.key]: v }))}
+                />
+              ))}
+            </div>
+
+            <div style={{ height: 12 }} />
+            <Eyebrow num="◒" label="note" t={t} style={{ marginBottom: 8 }} />
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder={LumiereVoice[tweaks.voice].greeting[0]}
+              rows={3}
+              style={{
+                width: '100%', padding: 10, resize: 'vertical',
+                border: `1px solid ${t.line}`, outline: 'none', background: t.bg,
+                color: t.cream, fontFamily: LumiereType.body, fontStyle: 'italic',
+                fontSize: 15, lineHeight: 1.4,
+              }}
+            />
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+              <button onClick={() => setOpen(false)} style={{
+                flex: 1, padding: '12px 0', background: 'transparent',
+                border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
+                fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+                textTransform: 'uppercase',
+              }}>cancel</button>
+              <button onClick={submit} style={{
+                flex: 2, padding: '12px 0', background: t.cream, color: t.bg,
+                border: 'none', cursor: 'pointer',
+                fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+                textTransform: 'uppercase',
+              }}>commit entry</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {entries.length > 0 && (
+        <div style={{ padding: '8px 20px 40px' }}>
+          <Eyebrow num={String(entries.length).padStart(2, '0')} label="your log" t={t} style={{ marginBottom: 14 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {entries.map(e => (
+              <div key={e.id} style={{
+                borderLeft: `2px solid ${t.accent}`, paddingLeft: 12,
+              }}>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                  marginBottom: 6,
+                }}>
+                  <div style={{
+                    fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+                    textTransform: 'uppercase', color: t.muted,
+                  }}>{new Date(e.createdAt).toLocaleDateString()} · cry {e.cry}</div>
+                  <button onClick={() => deleteEntry(e.id)} style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+                    textTransform: 'uppercase', color: t.muted, padding: 0,
+                  }}>erase</button>
+                </div>
+                {e.note && (
+                  <div style={{
+                    fontFamily: LumiereType.body, fontStyle: 'italic',
+                    fontSize: 15, color: t.cream, lineHeight: 1.4,
+                  }}>{e.note}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetaRow({ t, items }: { t: ReturnType<typeof useTweaks>['theme']; items: string[] }) {
+  return (
+    <div style={{
+      fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+      textTransform: 'uppercase', color: t.muted,
+    }}>{items.join(' · ')}</div>
+  );
+}
+
+function CenterNote({ t, text }: { t: ReturnType<typeof useTweaks>['theme']; text: string }) {
+  return (
+    <div style={{
+      padding: '80px 20px', textAlign: 'center',
+      fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 18,
+      color: t.creamDim,
+    }}>{text}</div>
+  );
+}

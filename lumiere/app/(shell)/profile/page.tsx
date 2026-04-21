@@ -6,6 +6,7 @@ import {
 } from '@/app/components/lib/tokens';
 import type { ThemeKey, Voice, DimKey } from '@/app/components/lib/tokens';
 import { useLog } from '@/app/components/lib/logStore';
+import { useAuth } from '@/app/components/AuthProvider';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import type { CryStyle } from '@/app/components/ui/CryMeter';
 import { Eyebrow } from '@/app/components/ui/Primitives';
@@ -17,6 +18,7 @@ const CRY_STYLES: CryStyle[] = ['bar', 'dots', 'wave'];
 export default function ProfilePage() {
   const { theme: t, tweaks, setTweaks } = useTweaks();
   const entries = useLog();
+  const auth = useAuth();
   const avg = entries.length ? Math.round(entries.reduce((s, e) => s + e.cry, 0) / entries.length) : 0;
   const max = entries.reduce((m, e) => Math.max(m, e.cry), 0);
 
@@ -43,6 +45,10 @@ export default function ProfilePage() {
       </div>
 
       <div style={{ padding: '20px' }}>
+        <Eyebrow num="00" label="identity" t={t} style={{ marginBottom: 12 }} />
+        <AuthStrip auth={auth} t={t} />
+
+        <div style={{ height: 28 }} />
         <Eyebrow num="01" label="instrument" t={t} style={{ marginBottom: 12 }} />
         <Stat t={t} label="logged" value={entries.length.toString().padStart(3, '0')} />
         <Stat t={t} label="avg cry" value={avg.toString().padStart(3, '0')} />
@@ -130,6 +136,50 @@ export default function ProfilePage() {
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthStrip({
+  auth, t,
+}: {
+  auth: ReturnType<typeof useAuth>;
+  t: ReturnType<typeof useTweaks>['theme'];
+}) {
+  const label =
+    auth.status === 'disabled' ? 'local · not synced' :
+    auth.status === 'init' ? 'connecting…' :
+    auth.status === 'anon' ? 'anon · synced' :
+    auth.status === 'user' ? (auth.email || 'signed in') :
+    auth.status === 'error' ? `error · ${auth.error ?? 'unknown'}` : '—';
+
+  const dot =
+    auth.status === 'user' ? t.signal :
+    auth.status === 'anon' ? t.accent :
+    auth.status === 'error' ? t.danger : t.muted;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '12px 14px', border: `1px solid ${t.line}`, background: t.surface,
+    }}>
+      <div style={{
+        width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0,
+      }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+          textTransform: 'uppercase', color: t.cream,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{label}</div>
+        {auth.userId && (
+          <div style={{
+            fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.2,
+            color: t.muted, marginTop: 2,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>id · {auth.userId}</div>
+        )}
       </div>
     </div>
   );

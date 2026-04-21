@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { DM_Serif_Display, Cormorant_Garamond, JetBrains_Mono } from 'next/font/google';
 import { TweaksProvider } from '@/app/components/TweaksProvider';
+import { AuthProvider } from '@/app/components/AuthProvider';
 import './globals.css';
 
 const serifDisplay = DM_Serif_Display({ weight: '400', subsets: ['latin'], variable: '--font-display', style: ['normal', 'italic'] });
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${serifDisplay.variable} ${serifBody.variable} ${mono.variable}`}>
       <body style={{ margin: 0, background: '#06040a', fontFamily: 'var(--font-body)', color: '#ebe6d8' }}>
-        <TweaksProvider>{children}</TweaksProvider>
+        <TweaksProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </TweaksProvider>
       </body>
     </html>
   );

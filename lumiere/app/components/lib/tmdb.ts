@@ -69,6 +69,36 @@ export async function getMovie(id: number): Promise<Film> {
   return film;
 }
 
+export interface ImageCatalog {
+  posters: { url: string; thumb: string }[];
+  backdrops: { url: string; thumb: string }[];
+}
+
+interface TmdbImage { file_path?: string }
+
+export async function getFilmImages(id: string): Promise<ImageCatalog> {
+  const mMovie = id.match(/^tmdb_m_(\d+)$/);
+  const mEp = id.match(/^tmdb_t_(\d+)_s(\d+)_e(\d+)$/);
+  let url: string;
+  if (mMovie) {
+    url = `${TMDB_BASE}/movie/${mMovie[1]}/images?include_image_language=en,null`;
+  } else if (mEp) {
+    url = `${TMDB_BASE}/tv/${mEp[1]}/season/${mEp[2]}/episode/${mEp[3]}/images`;
+  } else {
+    throw new Error('bad id');
+  }
+  const r = await fetch(url, { headers: authHeaders(), next: { revalidate: 3600 } });
+  if (!r.ok) throw new Error(`TMDB images failed: ${r.status}`);
+  const j = await r.json();
+  const paths = (xs: TmdbImage[] | undefined) => (xs || []).map(x => x.file_path).filter(Boolean) as string[];
+  const posterSrc = paths(j.posters).concat(paths(j.stills));
+  const backdropSrc = paths(j.backdrops);
+  return {
+    posters: posterSrc.map(p => ({ url: `${IMG_BASE}/w500${p}`, thumb: `${IMG_BASE}/w185${p}` })),
+    backdrops: backdropSrc.map(p => ({ url: `${IMG_BASE}/original${p}`, thumb: `${IMG_BASE}/w300${p}` })),
+  };
+}
+
 export async function getEpisode(tvId: number, season: number, episode: number): Promise<Film> {
   const tvUrl = `${TMDB_BASE}/tv/${tvId}`;
   const epUrl = `${TMDB_BASE}/tv/${tvId}/season/${season}/episode/${episode}`;

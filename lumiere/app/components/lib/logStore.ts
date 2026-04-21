@@ -18,11 +18,18 @@ type Row = {
 
 let mode: Mode = 'local';
 let userId: string | null = null;
-let cache: LogEntry[] | null = null;
+let cache: LogEntry[] = [];
+let initialized = false;
 let realtimeUnsub: (() => void) | null = null;
 const listeners = new Set<() => void>();
 
 const notify = () => { for (const cb of listeners) cb(); };
+
+function ensureInit() {
+  if (initialized || typeof window === 'undefined') return;
+  initialized = true;
+  cache = readLocal();
+}
 
 function readLocal(): LogEntry[] {
   if (typeof window === 'undefined') return [];
@@ -105,11 +112,12 @@ export function setBackendUser(nextUserId: string | null) {
   }
 }
 
-function snapshot(): LogEntry[] { return cache ?? []; }
-function serverSnapshot(): LogEntry[] { return []; }
+const EMPTY: LogEntry[] = [];
+function snapshot(): LogEntry[] { ensureInit(); return cache; }
+function serverSnapshot(): LogEntry[] { return EMPTY; }
 
 function subscribe(cb: () => void): () => void {
-  if (cache === null) cache = readLocal();
+  ensureInit();
   listeners.add(cb);
   const onStorage = (e: StorageEvent) => {
     if (mode === 'local' && e.key === LOCAL_KEY) {
@@ -155,7 +163,7 @@ export function saveEntry(input: {
     note: input.note?.trim() || undefined,
     createdAt: new Date().toISOString(),
   };
-  cache = [entry, ...(cache ?? [])];
+  cache = [entry, ...(cache)];
   notify();
 
   if (mode === 'remote') {
@@ -172,7 +180,7 @@ export function saveEntry(input: {
       }).then(({ error }) => {
         if (error) {
           console.error('[lumiere] log insert failed', error.message);
-          cache = (cache ?? []).filter(e => e.id !== entry.id);
+          cache = (cache).filter(e => e.id !== entry.id);
           notify();
         }
       });
@@ -185,7 +193,7 @@ export function saveEntry(input: {
 }
 
 export function deleteEntry(id: string): void {
-  const prev = cache ?? [];
+  const prev = cache;
   const victim = prev.find(e => e.id === id);
   cache = prev.filter(e => e.id !== id);
   notify();
@@ -197,7 +205,7 @@ export function deleteEntry(id: string): void {
         if (error) {
           console.error('[lumiere] log delete failed', error.message);
           if (victim) {
-            cache = [victim, ...(cache ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+            cache = [victim, ...(cache)].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
             notify();
           }
         }

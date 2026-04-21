@@ -6,13 +6,22 @@ import { LumiereType, LumiereVoice } from '@/app/components/lib/tokens';
 import { useLog, deleteEntry } from '@/app/components/lib/logStore';
 import { getFilm } from '@/app/components/lib/api';
 import type { Film, LogEntry } from '@/app/components/lib/types';
+import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import { Poster } from '@/app/components/ui/Poster';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 
 export default function LogPage() {
   const { theme: t, tweaks } = useTweaks();
   const entries = useLog();
-  const films = useFilmsForEntries(entries);
+  const rawFilms = useFilmsForEntries(entries);
+  const overrides = useFilmOverrides();
+  const films = React.useMemo<Record<string, Film>>(() => {
+    const out: Record<string, Film> = {};
+    for (const [id, f] of Object.entries(rawFilms)) {
+      out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
+    }
+    return out;
+  }, [rawFilms, overrides]);
 
   const voice = LumiereVoice[tweaks.voice];
   const greeting = voice.greeting[entries.length % voice.greeting.length];

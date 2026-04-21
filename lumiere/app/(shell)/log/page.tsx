@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType, LumiereVoice } from '@/app/components/lib/tokens';
 import { useLog, deleteEntry } from '@/app/components/lib/logStore';
-import { getFilm } from '@/app/components/lib/api';
 import type { Film, LogEntry } from '@/app/components/lib/types';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
+import { useFilmsForEntries } from '@/app/components/lib/useFilms';
 import { Poster } from '@/app/components/ui/Poster';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 
@@ -66,26 +66,6 @@ export default function LogPage() {
       </div>
     </div>
   );
-}
-
-function useFilmsForEntries(entries: LogEntry[]) {
-  const [films, setFilms] = React.useState<Record<string, Film>>({});
-  React.useEffect(() => {
-    const need = Array.from(new Set(entries.map(e => e.filmId))).filter(id => !films[id]);
-    if (need.length === 0) return;
-    let cancel = false;
-    Promise.all(need.map(id => getFilm(id).then(f => [id, f] as const))).then(pairs => {
-      if (cancel) return;
-      setFilms(prev => {
-        const next = { ...prev };
-        for (const [id, f] of pairs) if (f) next[id] = f;
-        return next;
-      });
-    });
-    return () => { cancel = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries]);
-  return films;
 }
 
 function EntryCard({

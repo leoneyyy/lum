@@ -30,7 +30,7 @@ export default function HomePage() {
   const issueNum = String(Math.min(999, Math.max(1, entries.length || 1))).padStart(3, '0');
   const today = React.useMemo(() => {
     const d = new Date();
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toLowerCase();
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toLowerCase();
   }, []);
 
   return (
@@ -122,7 +122,7 @@ function ArticleCard({
   index: number;
 }) {
   const ratingCount = Object.values(entry.ratings).filter(Boolean).length;
-  const date = new Date(entry.createdAt).toLocaleDateString(undefined, {
+  const date = new Date(entry.createdAt).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   }).toLowerCase();
   const num = String(index + 1).padStart(2, '0');

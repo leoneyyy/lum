@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { LogEntry, RatingMap, Visibility } from './types';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 import { useFollowing } from './followStore';
@@ -28,6 +29,51 @@ function rowToEntry(r: Row): LogEntry {
   };
 }
 
+// ── invalidation bus ──────────────────────────────────────────────
+// Every log_entries INSERT/UPDATE/DELETE (that RLS lets us see) bumps a
+// version counter. Feed hooks treat this as a dep so they refetch.
+
+let feedUserId: string | null = null;
+let feedChannel: RealtimeChannel | null = null;
+let feedVersion = 0;
+const feedListeners = new Set<() => void>();
+const notifyFeed = () => { feedVersion++; for (const cb of feedListeners) cb(); };
+
+function teardownFeedChannel() {
+  const sb = getSupabase();
+  if (feedChannel && sb) void sb.removeChannel(feedChannel);
+  feedChannel = null;
+}
+
+function setupFeedChannel() {
+  const sb = getSupabase();
+  if (!sb || !feedUserId) return;
+  feedChannel = sb.channel(`feed-invalidate:${feedUserId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'log_entries' },
+      () => notifyFeed(),
+    )
+    .subscribe();
+}
+
+export function setFeedUser(id: string | null) {
+  if (feedUserId === id) return;
+  teardownFeedChannel();
+  feedUserId = id;
+  if (id) setupFeedChannel();
+}
+
+function useFeedVersion(): number {
+  const [v, setV] = React.useState(feedVersion);
+  React.useEffect(() => {
+    const cb = () => setV(feedVersion);
+    feedListeners.add(cb);
+    return () => { feedListeners.delete(cb); };
+  }, []);
+  return v;
+}
+
 export interface FeedState {
   entries: LogEntry[];
   state: 'idle' | 'loading' | 'loaded' | 'error';
@@ -42,6 +88,7 @@ type Result = { key: string; data: FeedState };
 
 function useQueryFeed(key: string, limit: number, run: (key: string) => Promise<FeedState>): FeedState {
   const [result, setResult] = React.useState<Result | null>(null);
+  const version = useFeedVersion();
 
   React.useEffect(() => {
     if (!key) return;
@@ -49,7 +96,7 @@ function useQueryFeed(key: string, limit: number, run: (key: string) => Promise<
     let cancel = false;
     void run(key).then(data => { if (!cancel) setResult({ key, data }); });
     return () => { cancel = true; };
-  }, [key, limit, run]);
+  }, [key, limit, run, version]);
 
   if (!key) return EMPTY_LOADED;
   if (!isSupabaseConfigured()) return OFFLINE;

@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabase } from './supabase';
 
 export interface ReactionSummary {
@@ -15,11 +16,60 @@ const inflight = new Set<string>();
 const listeners = new Set<() => void>();
 const notify = () => { for (const cb of listeners) cb(); };
 
+let channel: RealtimeChannel | null = null;
+
+function teardownChannel() {
+  const sb = getSupabase();
+  if (channel && sb) void sb.removeChannel(channel);
+  channel = null;
+}
+
+function setupChannel() {
+  const sb = getSupabase();
+  if (!sb || !myUserId) return;
+  channel = sb.channel(`reactions:${myUserId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'reactions' },
+      payload => {
+        const row = payload.new as { entry_id: string; user_id: string };
+        applyRealtimeDelta(row.entry_id, row.user_id, +1);
+      },
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'reactions' },
+      payload => {
+        const row = payload.old as { entry_id?: string; user_id?: string };
+        if (!row.entry_id || !row.user_id) return;
+        applyRealtimeDelta(row.entry_id, row.user_id, -1);
+      },
+    )
+    .subscribe();
+}
+
+function applyRealtimeDelta(entryId: string, userId: string, delta: 1 | -1) {
+  const cur = cache.get(entryId);
+  if (!cur) return;                      // entry not in our view
+  const isMine = userId === myUserId;
+  if (isMine) {
+    // If our optimistic state already reflects this, ignore (dedupe).
+    const expectedMine = delta > 0;
+    if (cur.mine === expectedMine) return;
+    cache.set(entryId, { count: Math.max(0, cur.count + delta), mine: expectedMine });
+  } else {
+    cache.set(entryId, { count: Math.max(0, cur.count + delta), mine: cur.mine });
+  }
+  notify();
+}
+
 export function setReactionUser(id: string | null) {
   if (myUserId === id) return;
+  teardownChannel();
   myUserId = id;
   cache.clear();
   notify();
+  if (id) setupChannel();
 }
 
 async function fetchMissing(ids: string[]): Promise<void> {

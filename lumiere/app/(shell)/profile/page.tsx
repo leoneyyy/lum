@@ -11,6 +11,7 @@ import { useLog } from '@/app/components/lib/logStore';
 import { useAuth } from '@/app/components/AuthProvider';
 import { useMyProfile, saveMyProfile } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
+import { startEmailAuth, signOut } from '@/app/components/lib/auth';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import type { CryStyle } from '@/app/components/ui/CryMeter';
 import { Eyebrow, Avatar, avatarFor } from '@/app/components/ui/Primitives';
@@ -158,7 +159,7 @@ function AuthStrip({
   const label =
     auth.status === 'disabled' ? 'local · not synced' :
     auth.status === 'init' ? 'connecting…' :
-    auth.status === 'anon' ? 'anon · synced' :
+    auth.status === 'anon' ? 'anon · synced on this device' :
     auth.status === 'user' ? (auth.email || 'signed in') :
     auth.status === 'error' ? `error · ${auth.error ?? 'unknown'}` : '—';
 
@@ -167,28 +168,172 @@ function AuthStrip({
     auth.status === 'anon' ? t.accent :
     auth.status === 'error' ? t.danger : t.muted;
 
+  const [expanded, setExpanded] = React.useState(false);
+  const [email, setEmail] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [sent, setSent] = React.useState<'upgrade' | 'signin' | null>(null);
+  const [msg, setMsg] = React.useState<string | null>(null);
+  const [confirmOut, setConfirmOut] = React.useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    setMsg(null);
+    const res = await startEmailAuth(email);
+    setBusy(false);
+    if (!res.ok) { setMsg(res.error ?? 'failed'); return; }
+    setSent(res.intent);
+  };
+
+  const doSignOut = async () => {
+    setBusy(true);
+    const err = await signOut();
+    setBusy(false);
+    if (err) setMsg(err);
+  };
+
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '12px 14px', border: `1px solid ${t.line}`, background: t.surface,
+      border: `1px solid ${t.line}`, background: t.surface,
     }}>
       <div style={{
-        width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0,
-      }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '12px 14px',
+      }}>
         <div style={{
-          fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
-          textTransform: 'uppercase', color: t.cream,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>{label}</div>
-        {auth.userId && (
+          width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0,
+        }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.2,
-            color: t.muted, marginTop: 2,
+            fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+            textTransform: 'uppercase', color: t.cream,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>id · {auth.userId}</div>
+          }}>{label}</div>
+          {auth.userId && (
+            <div style={{
+              fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.2,
+              color: t.muted, marginTop: 2,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>id · {auth.userId}</div>
+          )}
+        </div>
+        {(auth.status === 'anon' || auth.status === 'user') && !expanded && (
+          <button onClick={() => { setExpanded(true); setSent(null); setMsg(null); setConfirmOut(false); }} style={{
+            background: 'transparent', border: `1px solid ${t.line}`, cursor: 'pointer',
+            padding: '6px 10px', color: t.creamDim,
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+            textTransform: 'uppercase',
+          }}>{auth.status === 'anon' ? 'connect email' : 'account'}</button>
         )}
       </div>
+
+      {expanded && auth.status === 'anon' && (
+        <div style={{
+          padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          {sent === 'upgrade' && (
+            <EmailSentNote t={t} email={email} note="check your inbox · click the link to anchor this device to that email. your log stays." />
+          )}
+          {sent === 'signin' && (
+            <EmailSentNote t={t} email={email} note="check your inbox · that email already has an account. clicking the link signs you into it and replaces this anonymous session." />
+          )}
+          {!sent && (
+            <>
+              <div style={{
+                fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
+                color: t.creamDim, lineHeight: 1.4,
+              }}>attach an email so you don&apos;t lose your log if this browser gets wiped.</div>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@somewhere.com"
+                autoCapitalize="off"
+                autoCorrect="off"
+                style={{
+                  width: '100%', padding: 10,
+                  background: t.bg, color: t.cream,
+                  border: `1px solid ${t.line}`, outline: 'none',
+                  fontFamily: LumiereType.mono, fontSize: 12, letterSpacing: 0.5,
+                }}
+              />
+              {msg && <div style={{
+                fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
+                textTransform: 'uppercase', color: t.danger,
+              }}>{msg}</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setExpanded(false)} style={{
+                  flex: 1, padding: '10px 0', background: 'transparent',
+                  border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
+                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+                  textTransform: 'uppercase',
+                }}>cancel</button>
+                <button onClick={submit} disabled={busy || !email.trim()} style={{
+                  flex: 2, padding: '10px 0', background: t.cream, color: t.bg,
+                  border: 'none', cursor: busy ? 'default' : 'pointer',
+                  opacity: busy || !email.trim() ? 0.6 : 1,
+                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+                  textTransform: 'uppercase',
+                }}>{busy ? 'sending…' : 'send magic link'}</button>
+              </div>
+            </>
+          )}
+          {sent && (
+            <button onClick={() => setExpanded(false)} style={{
+              padding: '10px 0', background: 'transparent',
+              border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
+              fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+              textTransform: 'uppercase',
+            }}>ok</button>
+          )}
+        </div>
+      )}
+
+      {expanded && auth.status === 'user' && (
+        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {msg && <div style={{
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
+            textTransform: 'uppercase', color: t.danger,
+          }}>{msg}</div>}
+          {!confirmOut ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setExpanded(false)} style={{
+                flex: 1, padding: '10px 0', background: 'transparent',
+                border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
+                fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+                textTransform: 'uppercase',
+              }}>close</button>
+              <button onClick={() => setConfirmOut(true)} style={{
+                flex: 2, padding: '10px 0', background: 'transparent',
+                border: `1px solid ${t.danger}`, color: t.danger, cursor: 'pointer',
+                fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+                textTransform: 'uppercase',
+              }}>sign out</button>
+            </div>
+          ) : (
+            <>
+              <div style={{
+                fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
+                color: t.creamDim, lineHeight: 1.4,
+              }}>sign out and go back to anonymous? your remote log stays safe · you can sign back in anytime with the same email.</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setConfirmOut(false)} style={{
+                  flex: 1, padding: '10px 0', background: 'transparent',
+                  border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
+                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+                  textTransform: 'uppercase',
+                }}>cancel</button>
+                <button onClick={doSignOut} disabled={busy} style={{
+                  flex: 2, padding: '10px 0', background: t.danger, color: t.bg,
+                  border: 'none', cursor: busy ? 'default' : 'pointer',
+                  opacity: busy ? 0.6 : 1,
+                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+                  textTransform: 'uppercase',
+                }}>{busy ? 'signing out…' : 'confirm sign out'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -385,6 +530,29 @@ function FollowingStat({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
         color: t.cream, letterSpacing: -0.6,
       }}>{value}</div>
     </Link>
+  );
+}
+
+function EmailSentNote({
+  t, email, note,
+}: {
+  t: ReturnType<typeof useTweaks>['theme'];
+  email: string;
+  note: string;
+}) {
+  return (
+    <div style={{
+      padding: '10px 12px', background: t.bg, border: `1px solid ${t.line}`,
+    }}>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+        textTransform: 'uppercase', color: t.signal, marginBottom: 6,
+      }}>✓ sent to {email}</div>
+      <div style={{
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
+        color: t.creamDim, lineHeight: 1.4,
+      }}>{note}</div>
+    </div>
   );
 }
 

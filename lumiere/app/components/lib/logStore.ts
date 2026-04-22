@@ -197,19 +197,43 @@ export function saveEntry(input: {
 }
 
 export function setEntryVisibility(id: string, visibility: Visibility): void {
+  updateEntry(id, { visibility });
+}
+
+export function updateEntry(
+  id: string,
+  patch: { cry?: number; ratings?: RatingMap; note?: string | null; visibility?: Visibility },
+): void {
   const prev = cache;
   const target = prev.find(e => e.id === id);
-  if (!target || target.visibility === visibility) return;
-  cache = prev.map(e => e.id === id ? { ...e, visibility } : e);
+  if (!target) return;
+
+  const next: LogEntry = {
+    ...target,
+    cry: patch.cry ?? target.cry,
+    ratings: patch.ratings ?? target.ratings,
+    note: 'note' in patch
+      ? (patch.note?.toString().trim() || undefined)
+      : target.note,
+    visibility: patch.visibility ?? target.visibility,
+  };
+
+  cache = prev.map(e => e.id === id ? next : e);
   notify();
 
   if (mode === 'remote') {
     const sb = getSupabase();
     if (sb && userId) {
-      void sb.from('log_entries').update({ visibility }).eq('id', id).then(({ error }) => {
+      const update: Record<string, unknown> = {};
+      if (patch.cry !== undefined) update.cry = next.cry;
+      if (patch.ratings !== undefined) update.ratings = next.ratings;
+      if ('note' in patch) update.note = next.note ?? null;
+      if (patch.visibility !== undefined) update.visibility = next.visibility;
+      if (Object.keys(update).length === 0) return;
+      void sb.from('log_entries').update(update).eq('id', id).then(({ error }) => {
         if (error) {
-          console.error('[lumiere] visibility update failed', error.message);
-          cache = cache.map(e => e.id === id ? { ...e, visibility: target.visibility } : e);
+          console.error('[lumiere] entry update failed', error.message);
+          cache = cache.map(e => e.id === id ? target : e);
           notify();
         }
       });

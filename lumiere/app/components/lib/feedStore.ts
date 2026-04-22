@@ -108,3 +108,34 @@ export function usePublicEntriesByUser(userId: string, limit = 40): FeedState {
   }, [limit]);
   return useQueryFeed(userId, limit, run);
 }
+
+export function useCircleEntriesForFilm(filmId: string, limit = 12): FeedState {
+  const { ids: followingIds } = useFollowing();
+  const key = React.useMemo(() => {
+    if (!filmId || followingIds.length === 0) return '';
+    return `${filmId}::${Array.from(followingIds).sort().join('|')}`;
+  }, [filmId, followingIds]);
+
+  const run = React.useCallback(async (k: string): Promise<FeedState> => {
+    const sb = getSupabase();
+    if (!sb) return OFFLINE;
+    const [film, joined] = k.split('::');
+    const ids = joined.split('|').filter(Boolean);
+    if (!film || ids.length === 0) return { ...EMPTY_LOADED };
+    const { data, error } = await sb
+      .from('log_entries')
+      .select('*')
+      .eq('film_id', film)
+      .eq('visibility', 'public')
+      .in('user_id', ids)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) return { entries: [], state: 'error', error: error.message };
+    return {
+      entries: (data as Row[]).map(rowToEntry),
+      state: 'loaded',
+      error: null,
+    };
+  }, [limit]);
+  return useQueryFeed(key, limit, run);
+}

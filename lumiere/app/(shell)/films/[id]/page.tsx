@@ -1,20 +1,24 @@
 'use client';
 import React from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType, DEFAULT_DIMS, LumiereVoice } from '@/app/components/lib/tokens';
 import type { DimKey } from '@/app/components/lib/tokens';
 import { getFilm } from '@/app/components/lib/api';
-import type { Film, RatingMap, Visibility } from '@/app/components/lib/types';
+import type { Film, LogEntry, Profile, RatingMap, Visibility } from '@/app/components/lib/types';
 import { Poster } from '@/app/components/ui/Poster';
 import { CryMeter } from '@/app/components/ui/CryMeter';
-import { RatingRow, Eyebrow } from '@/app/components/ui/Primitives';
-import { saveEntry, useFilmEntries, deleteEntry } from '@/app/components/lib/logStore';
+import { RatingRow, Eyebrow, Avatar, avatarFor } from '@/app/components/ui/Primitives';
+import { saveEntry, useFilmEntries, deleteEntry, updateEntry } from '@/app/components/lib/logStore';
 import {
   useFilmOverride, setFilmOverride, applyOverride,
 } from '@/app/components/lib/filmOverrides';
 import type { FilmOverride } from '@/app/components/lib/filmOverrides';
 import { ImagePicker } from '@/app/components/ui/ImagePicker';
+import { useCircleEntriesForFilm } from '@/app/components/lib/feedStore';
+import { useProfiles } from '@/app/components/lib/profileStore';
+import { useFollowing } from '@/app/components/lib/followStore';
 
 export default function FilmDetailPage() {
   const params = useParams<{ id: string }>();
@@ -44,22 +48,63 @@ export default function FilmDetailPage() {
   }), [rawFilm?.posterUrl, rawFilm?.backdropUrl]);
 
   const [picker, setPicker] = React.useState<null | 'poster' | 'backdrop'>(null);
-  const [open, setOpen] = React.useState(false);
+  type FormMode = { kind: 'closed' } | { kind: 'new' } | { kind: 'edit'; entryId: string };
+  const [mode, setMode] = React.useState<FormMode>({ kind: 'closed' });
   const [cry, setCry] = React.useState(0);
   const [ratings, setRatings] = React.useState<RatingMap>({});
   const [note, setNote] = React.useState('');
   const [visibility, setVisibility] = React.useState<Visibility>('private');
+
+  const searchParams = useSearchParams();
+  const editParam = searchParams?.get('edit') ?? null;
+  const consumedEditRef = React.useRef<string | null>(null);
 
   const activeDims = React.useMemo(
     () => DEFAULT_DIMS.filter(d => tweaks.dims.includes(d.key as DimKey)),
     [tweaks.dims],
   );
 
+  const startNew = () => {
+    setMode({ kind: 'new' });
+    setCry(0); setRatings({}); setNote(''); setVisibility('private');
+  };
+  const startEdit = (entryId: string) => {
+    const target = entries.find(e => e.id === entryId);
+    if (!target) return;
+    setMode({ kind: 'edit', entryId });
+    setCry(target.cry);
+    setRatings(target.ratings);
+    setNote(target.note ?? '');
+    setVisibility(target.visibility);
+  };
+  const closeForm = () => {
+    setMode({ kind: 'closed' });
+    setCry(0); setRatings({}); setNote(''); setVisibility('private');
+  };
+
+  React.useEffect(() => {
+    if (!editParam || consumedEditRef.current === editParam) return;
+    const target = entries.find(e => e.id === editParam);
+    if (!target) return;
+    consumedEditRef.current = editParam;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setMode({ kind: 'edit', entryId: editParam });
+    setCry(target.cry);
+    setRatings(target.ratings);
+    setNote(target.note ?? '');
+    setVisibility(target.visibility);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    router.replace(`/films/${encodeURIComponent(id)}`);
+  }, [editParam, entries, router, id]);
+
   const submit = () => {
     if (!film) return;
-    saveEntry({ filmId: film.id, cry, ratings, note, visibility });
-    setOpen(false);
-    setCry(0); setRatings({}); setNote(''); setVisibility('private');
+    if (mode.kind === 'new') {
+      saveEntry({ filmId: film.id, cry, ratings, note, visibility });
+    } else if (mode.kind === 'edit') {
+      updateEntry(mode.entryId, { cry, ratings, note, visibility });
+    }
+    closeForm();
   };
 
   if (loading) return <CenterNote t={t} text="loading…" />;
@@ -152,8 +197,8 @@ export default function FilmDetailPage() {
       </div>
 
       <div style={{ padding: '8px 20px 20px' }}>
-        {!open ? (
-          <button onClick={() => setOpen(true)} style={{
+        {mode.kind === 'closed' ? (
+          <button onClick={startNew} style={{
             display: 'block', width: '100%', padding: '16px 0',
             background: t.cream, color: t.bg, border: 'none', cursor: 'pointer',
             fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 3,
@@ -164,6 +209,12 @@ export default function FilmDetailPage() {
             border: `1px solid ${t.line}`, padding: 18, marginTop: 4,
             background: t.surface,
           }}>
+            {mode.kind === 'edit' && (
+              <div style={{
+                fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+                textTransform: 'uppercase', color: t.signal, marginBottom: 14,
+              }}>§ editing entry</div>
+            )}
             <Eyebrow num="◐" label="cry meter" t={t} style={{ marginBottom: 12 }} />
             <CryMeter
               value={cry}
@@ -223,7 +274,7 @@ export default function FilmDetailPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <button onClick={() => setOpen(false)} style={{
+              <button onClick={closeForm} style={{
                 flex: 1, padding: '12px 0', background: 'transparent',
                 border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
                 fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
@@ -234,7 +285,7 @@ export default function FilmDetailPage() {
                 border: 'none', cursor: 'pointer',
                 fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
                 textTransform: 'uppercase',
-              }}>commit entry</button>
+              }}>{mode.kind === 'edit' ? 'save changes' : 'commit entry'}</button>
             </div>
           </div>
         )}
@@ -250,17 +301,26 @@ export default function FilmDetailPage() {
               }}>
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                  marginBottom: 6,
+                  marginBottom: 6, gap: 10,
                 }}>
                   <div style={{
+                    flex: 1, minWidth: 0,
                     fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
                     textTransform: 'uppercase', color: t.muted,
-                  }}>{new Date(e.createdAt).toLocaleDateString()} · cry {e.cry}</div>
-                  <button onClick={() => deleteEntry(e.id)} style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
-                    textTransform: 'uppercase', color: t.muted, padding: 0,
-                  }}>erase</button>
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{new Date(e.createdAt).toLocaleDateString()} · cry {e.cry} · {e.visibility === 'public' ? 'public' : 'private'}</div>
+                  <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+                    <button onClick={() => startEdit(e.id)} style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+                      textTransform: 'uppercase', color: t.creamDim, padding: 0,
+                    }}>edit</button>
+                    <button onClick={() => deleteEntry(e.id)} style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+                      textTransform: 'uppercase', color: t.muted, padding: 0,
+                    }}>erase</button>
+                  </div>
                 </div>
                 {e.note && (
                   <div style={{
@@ -273,6 +333,8 @@ export default function FilmDetailPage() {
           </div>
         </div>
       )}
+
+      <CircleForFilm filmId={id} t={t} />
 
       {picker && (
         <ImagePicker
@@ -299,6 +361,99 @@ function MetaRow({ t, items }: { t: ReturnType<typeof useTweaks>['theme']; items
       fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
       textTransform: 'uppercase', color: t.muted,
     }}>{items.join(' · ')}</div>
+  );
+}
+
+function CircleForFilm({ filmId, t }: {
+  filmId: string;
+  t: ReturnType<typeof useTweaks>['theme'];
+}) {
+  const { ids: followingIds, state: followState } = useFollowing();
+  const feed = useCircleEntriesForFilm(filmId, 10);
+  const authors = useProfiles(feed.entries.map(e => e.userId));
+
+  if (followState !== 'loaded' || followingIds.length === 0) return null;
+  if (feed.state === 'loading') return null;
+  if (feed.state === 'error') return null;
+
+  return (
+    <div style={{
+      padding: '8px 20px 40px', borderTop: `1px solid ${t.line}`,
+      marginTop: 8,
+    }}>
+      <Eyebrow
+        num={String(feed.entries.length).padStart(2, '0')}
+        label="your circle on this"
+        t={t}
+        style={{ margin: '24px 0 14px' }}
+      />
+      {feed.entries.length === 0 ? (
+        <div style={{
+          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+          color: t.creamDim,
+        }}>no one in your circle has logged this yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {feed.entries.map(e => (
+            <CircleEntry
+              key={e.id}
+              entry={e}
+              author={authors[e.userId]}
+              t={t}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CircleEntry({ entry, author, t }: {
+  entry: LogEntry;
+  author: Profile | undefined;
+  t: ReturnType<typeof useTweaks>['theme'];
+}) {
+  const date = new Date(entry.createdAt).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric',
+  }).toLowerCase();
+  const avatar = author
+    ? avatarFor(author.id, author.handle)
+    : avatarFor(entry.userId);
+
+  const header = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+      <Avatar friend={avatar} size={28} t={t} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+          color: t.cream,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>@{author?.handle ?? '…'}</div>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4,
+          textTransform: 'uppercase', color: t.muted, marginTop: 2,
+        }}>{date} · cry {entry.cry}</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <article style={{
+      borderLeft: `2px solid ${t.accent}`, paddingLeft: 12,
+    }}>
+      {author?.handle ? (
+        <Link href={`/u/${encodeURIComponent(author.handle)}`} style={{
+          display: 'block', color: 'inherit', textDecoration: 'none',
+        }}>{header}</Link>
+      ) : header}
+      {entry.note && (
+        <blockquote style={{
+          margin: 0, padding: 0,
+          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+          lineHeight: 1.4, color: t.cream,
+        }}>{entry.note}</blockquote>
+      )}
+    </article>
   );
 }
 

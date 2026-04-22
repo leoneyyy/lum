@@ -87,3 +87,54 @@ export function avatarFor(seed: string, fallbackLabel?: string): { initials: str
   const initials = (label.slice(0, 2) || '??').toUpperCase();
   return { initials, tint };
 }
+
+interface ReactionButtonProps {
+  count: number;
+  mine: boolean;
+  t: Theme;
+  onToggle: () => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+}
+export function ReactionButton({ count, mine, t, onToggle, disabled, readOnly }: ReactionButtonProps) {
+  const color = mine ? t.signal : t.muted;
+  const label = count > 0 ? String(count) : '·';
+  const handle = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!disabled && !readOnly) onToggle();
+  };
+  const Outer = readOnly ? 'div' : 'button';
+  return (
+    <Outer
+      {...(readOnly ? {} : { type: 'button', onClick: handle, disabled })}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '4px 10px',
+        background: mine ? t.surfaceHi : 'transparent',
+        border: `1px solid ${mine ? t.signal : t.line}`,
+        cursor: readOnly || disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Heart filled={mine} color={color} />
+      <span style={{
+        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.2,
+        color,
+      }}>{label}</span>
+    </Outer>
+  );
+}
+
+function Heart({ filled, color }: { filled: boolean; color: string }) {
+  return (
+    <svg width="11" height="11" viewBox="0 0 14 13" fill="none">
+      <path
+        d="M7 11.5 L1.5 6 C0 4.5 0.5 2 2.5 1.5 C4.5 1 6 2.5 7 4 C8 2.5 9.5 1 11.5 1.5 C13.5 2 14 4.5 12.5 6 Z"
+        stroke={color}
+        strokeWidth="1.2"
+        fill={filled ? color : 'none'}
+      />
+    </svg>
+  );
+}

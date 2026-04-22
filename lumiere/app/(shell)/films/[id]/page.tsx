@@ -9,7 +9,7 @@ import { getFilm } from '@/app/components/lib/api';
 import type { Film, LogEntry, Profile, RatingMap, Visibility } from '@/app/components/lib/types';
 import { Poster } from '@/app/components/ui/Poster';
 import { CryMeter } from '@/app/components/ui/CryMeter';
-import { RatingRow, Eyebrow, Avatar, avatarFor } from '@/app/components/ui/Primitives';
+import { RatingRow, Eyebrow, Avatar, avatarFor, ReactionButton } from '@/app/components/ui/Primitives';
 import { saveEntry, useFilmEntries, deleteEntry, updateEntry } from '@/app/components/lib/logStore';
 import {
   useFilmOverride, setFilmOverride, applyOverride,
@@ -19,6 +19,7 @@ import { ImagePicker } from '@/app/components/ui/ImagePicker';
 import { useCircleEntriesForFilm } from '@/app/components/lib/feedStore';
 import { useProfiles } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
+import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
 
 export default function FilmDetailPage() {
   const params = useParams<{ id: string }>();
@@ -393,24 +394,39 @@ function CircleForFilm({ filmId, t }: {
           color: t.creamDim,
         }}>no one in your circle has logged this yet.</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {feed.entries.map(e => (
-            <CircleEntry
-              key={e.id}
-              entry={e}
-              author={authors[e.userId]}
-              t={t}
-            />
-          ))}
-        </div>
+        <CircleEntriesList entries={feed.entries} authors={authors} t={t} />
       )}
     </div>
   );
 }
 
-function CircleEntry({ entry, author, t }: {
+function CircleEntriesList({
+  entries, authors, t,
+}: {
+  entries: LogEntry[];
+  authors: Record<string, Profile>;
+  t: ReturnType<typeof useTweaks>['theme'];
+}) {
+  const reactions = useReactions(entries.map(e => e.id));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {entries.map(e => (
+        <CircleEntry
+          key={e.id}
+          entry={e}
+          author={authors[e.userId]}
+          reaction={reactions[e.id] ?? { count: 0, mine: false }}
+          t={t}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CircleEntry({ entry, author, reaction, t }: {
   entry: LogEntry;
   author: Profile | undefined;
+  reaction: { count: number; mine: boolean };
   t: ReturnType<typeof useTweaks>['theme'];
 }) {
   const date = new Date(entry.createdAt).toLocaleDateString('en-US', {
@@ -453,6 +469,14 @@ function CircleEntry({ entry, author, t }: {
           lineHeight: 1.4, color: t.cream,
         }}>{entry.note}</blockquote>
       )}
+      <div style={{ marginTop: 8 }}>
+        <ReactionButton
+          count={reaction.count}
+          mine={reaction.mine}
+          t={t}
+          onToggle={() => void toggleReaction(entry.id)}
+        />
+      </div>
     </article>
   );
 }

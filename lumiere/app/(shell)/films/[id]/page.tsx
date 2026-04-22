@@ -5,7 +5,7 @@ import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType, DEFAULT_DIMS, LumiereVoice } from '@/app/components/lib/tokens';
 import type { DimKey } from '@/app/components/lib/tokens';
 import { getFilm } from '@/app/components/lib/api';
-import type { Film, RatingMap } from '@/app/components/lib/types';
+import type { Film, RatingMap, Visibility } from '@/app/components/lib/types';
 import { Poster } from '@/app/components/ui/Poster';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import { RatingRow, Eyebrow } from '@/app/components/ui/Primitives';
@@ -48,6 +48,7 @@ export default function FilmDetailPage() {
   const [cry, setCry] = React.useState(0);
   const [ratings, setRatings] = React.useState<RatingMap>({});
   const [note, setNote] = React.useState('');
+  const [visibility, setVisibility] = React.useState<Visibility>('private');
 
   const activeDims = React.useMemo(
     () => DEFAULT_DIMS.filter(d => tweaks.dims.includes(d.key as DimKey)),
@@ -56,9 +57,9 @@ export default function FilmDetailPage() {
 
   const submit = () => {
     if (!film) return;
-    saveEntry({ filmId: film.id, cry, ratings, note });
+    saveEntry({ filmId: film.id, cry, ratings, note, visibility });
     setOpen(false);
-    setCry(0); setRatings({}); setNote('');
+    setCry(0); setRatings({}); setNote(''); setVisibility('private');
   };
 
   if (loading) return <CenterNote t={t} text="loading…" />;
@@ -202,6 +203,24 @@ export default function FilmDetailPage() {
                 fontSize: 15, lineHeight: 1.4,
               }}
             />
+
+            <div style={{ height: 14 }} />
+            <Eyebrow num="◓" label="visibility" t={t} style={{ marginBottom: 8 }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['private', 'public'] as Visibility[]).map(v => {
+                const active = visibility === v;
+                return (
+                  <button key={v} onClick={() => setVisibility(v)} style={{
+                    flex: 1, padding: '10px 0', cursor: 'pointer',
+                    background: active ? t.cream : 'transparent',
+                    color: active ? t.bg : t.creamDim,
+                    border: `1px solid ${active ? t.cream : t.line}`,
+                    fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+                    textTransform: 'uppercase',
+                  }}>{v === 'private' ? 'just me' : 'followers'}</button>
+                );
+              })}
+            </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
               <button onClick={() => setOpen(false)} style={{

@@ -6,8 +6,12 @@ import { LumiereType, LumiereVoice } from '@/app/components/lib/tokens';
 import { useLog } from '@/app/components/lib/logStore';
 import { useFilmsForEntries } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
-import type { Film, LogEntry } from '@/app/components/lib/types';
+import { useMyCircleFeed } from '@/app/components/lib/feedStore';
+import { useProfiles } from '@/app/components/lib/profileStore';
+import { useFollowing } from '@/app/components/lib/followStore';
+import type { Film, LogEntry, Profile } from '@/app/components/lib/types';
 import { CryMeter } from '@/app/components/ui/CryMeter';
+import { Avatar, avatarFor } from '@/app/components/ui/Primitives';
 
 const FEED_LIMIT = 5;
 
@@ -91,7 +95,171 @@ export default function HomePage() {
           )}
         </>
       )}
+
+      <CircleFeedSection t={t} cryStyle={tweaks.cryStyle} />
     </div>
+  );
+}
+
+function CircleFeedSection({
+  t, cryStyle,
+}: {
+  t: ReturnType<typeof useTweaks>['theme'];
+  cryStyle: ReturnType<typeof useTweaks>['tweaks']['cryStyle'];
+}) {
+  const { ids: followingIds, state: followState } = useFollowing();
+  const feed = useMyCircleFeed(8);
+  const authors = useProfiles(feed.entries.map(e => e.userId));
+  const rawFilms = useFilmsForEntries(feed.entries);
+  const overrides = useFilmOverrides();
+  const films = React.useMemo<Record<string, Film>>(() => {
+    const out: Record<string, Film> = {};
+    for (const [id, f] of Object.entries(rawFilms)) {
+      out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
+    }
+    return out;
+  }, [rawFilms, overrides]);
+
+  if (followState !== 'loaded') return null;
+  if (followingIds.length === 0) {
+    return (
+      <div style={{
+        padding: '28px 20px 40px', borderTop: `1px solid ${t.line}`,
+        marginTop: 16,
+      }}>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+          textTransform: 'uppercase', color: t.muted, marginBottom: 14,
+        }}>§ from your circle</div>
+        <div style={{
+          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+          color: t.creamDim, marginBottom: 14,
+        }}>no circle yet. follow someone to see their public entries here.</div>
+        <Link href="/friends" style={{
+          display: 'inline-block', padding: '10px 14px',
+          border: `1px solid ${t.line}`, color: t.cream, textDecoration: 'none',
+          fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+          textTransform: 'uppercase',
+        }}>find people →</Link>
+      </div>
+    );
+  }
+  if (feed.state === 'loading') return null;
+  if (feed.entries.length === 0) {
+    return (
+      <div style={{
+        padding: '28px 20px 40px', borderTop: `1px solid ${t.line}`,
+        marginTop: 16,
+      }}>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+          textTransform: 'uppercase', color: t.muted, marginBottom: 14,
+        }}>§ from your circle</div>
+        <div style={{
+          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+          color: t.creamDim,
+        }}>your circle hasn&apos;t posted anything public yet.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ borderTop: `1px solid ${t.line}`, marginTop: 16 }}>
+      <div style={{ padding: '24px 20px 8px' }}>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+          textTransform: 'uppercase', color: t.muted,
+        }}>§ from your circle</div>
+      </div>
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 14,
+        padding: '10px 20px 40px',
+      }}>
+        {feed.entries.map(e => (
+          <CircleEntryCard
+            key={e.id}
+            entry={e}
+            film={films[e.filmId] || null}
+            author={authors[e.userId]}
+            t={t}
+            cryStyle={cryStyle}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CircleEntryCard({
+  entry, film, author, t, cryStyle,
+}: {
+  entry: LogEntry;
+  film: Film | null;
+  author: Profile | undefined;
+  t: ReturnType<typeof useTweaks>['theme'];
+  cryStyle: ReturnType<typeof useTweaks>['tweaks']['cryStyle'];
+}) {
+  const date = new Date(entry.createdAt).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric',
+  }).toLowerCase();
+  const avatar = author
+    ? avatarFor(author.id, author.handle)
+    : avatarFor(entry.userId);
+
+  return (
+    <article style={{
+      border: `1px solid ${t.line}`, background: t.surface, padding: 14,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        {author?.handle ? (
+          <Link href={`/u/${encodeURIComponent(author.handle)}`} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            color: 'inherit', textDecoration: 'none', flex: 1, minWidth: 0,
+          }}>
+            <Avatar friend={avatar} size={28} t={t} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+                color: t.cream,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>@{author.handle}</div>
+            </div>
+          </Link>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+            <Avatar friend={avatar} size={28} t={t} />
+            <div style={{
+              fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+              color: t.muted,
+            }}>…</div>
+          </div>
+        )}
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4,
+          textTransform: 'uppercase', color: t.muted, flexShrink: 0,
+        }}>{date}</div>
+      </div>
+
+      <Link href={film ? `/films/${encodeURIComponent(film.id)}` : '#'} style={{
+        display: 'block', color: 'inherit', textDecoration: 'none',
+      }}>
+        <div style={{
+          fontFamily: LumiereType.display, fontSize: 22, lineHeight: 1,
+          color: t.cream, letterSpacing: -0.5, marginBottom: 10,
+        }}>{film?.title || 'unknown film'}</div>
+      </Link>
+
+      {entry.note && (
+        <blockquote style={{
+          margin: '0 0 12px', padding: '0 0 0 12px',
+          borderLeft: `2px solid ${t.accent}`,
+          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 16,
+          lineHeight: 1.4, color: t.cream,
+        }}>{entry.note}</blockquote>
+      )}
+
+      <CryMeter value={entry.cry} t={t} style={cryStyle} />
+    </article>
   );
 }
 

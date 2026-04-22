@@ -2,6 +2,8 @@
 import React from 'react';
 import { getSupabase, isSupabaseConfigured } from '@/app/components/lib/supabase';
 import { setBackendUser } from '@/app/components/lib/logStore';
+import { setProfileUser } from '@/app/components/lib/profileStore';
+import { setFollowUser } from '@/app/components/lib/followStore';
 
 export type AuthStatus = 'init' | 'anon' | 'user' | 'disabled' | 'error';
 
@@ -28,6 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const sb = getSupabase();
     if (!sb) {
       setBackendUser(null);
+      setProfileUser(null);
+      setFollowUser(null);
       return;
     }
 
@@ -42,6 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const email = session?.user?.email ?? null;
       const isAnon = !!session?.user?.is_anonymous;
       setBackendUser(userId);
+      setProfileUser(userId);
+      setFollowUser(userId);
       setState({
         status: error ? 'error' : userId ? (isAnon ? 'anon' : 'user') : 'init',
         userId,

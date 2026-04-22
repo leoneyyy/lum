@@ -1,15 +1,19 @@
 'use client';
 import React from 'react';
+import Link from 'next/link';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import {
   LumiereType, LumiereThemes, DEFAULT_DIMS,
 } from '@/app/components/lib/tokens';
 import type { ThemeKey, Voice, DimKey } from '@/app/components/lib/tokens';
+import type { Profile } from '@/app/components/lib/types';
 import { useLog } from '@/app/components/lib/logStore';
 import { useAuth } from '@/app/components/AuthProvider';
+import { useMyProfile, saveMyProfile } from '@/app/components/lib/profileStore';
+import { useFollowing } from '@/app/components/lib/followStore';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import type { CryStyle } from '@/app/components/ui/CryMeter';
-import { Eyebrow } from '@/app/components/ui/Primitives';
+import { Eyebrow, Avatar, avatarFor } from '@/app/components/ui/Primitives';
 
 const THEMES: ThemeKey[] = ['indigo', 'oxblood', 'bone', 'acid'];
 const VOICES: Voice[] = ['dry', 'poetic', 'playful'];
@@ -48,11 +52,15 @@ export default function ProfilePage() {
         <Eyebrow num="00" label="identity" t={t} style={{ marginBottom: 12 }} />
         <AuthStrip auth={auth} t={t} />
 
+        <div style={{ height: 18 }} />
+        <HandleBlock t={t} />
+
         <div style={{ height: 28 }} />
         <Eyebrow num="01" label="instrument" t={t} style={{ marginBottom: 12 }} />
         <Stat t={t} label="logged" value={entries.length.toString().padStart(3, '0')} />
         <Stat t={t} label="avg cry" value={avg.toString().padStart(3, '0')} />
         <Stat t={t} label="peak cry" value={max.toString().padStart(3, '0')} />
+        <FollowingStat t={t} />
 
         <div style={{ height: 28 }} />
         <Eyebrow num="02" label="theme" t={t} style={{ marginBottom: 12 }} />
@@ -182,6 +190,201 @@ function AuthStrip({
         )}
       </div>
     </div>
+  );
+}
+
+function HandleBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
+  const auth = useAuth();
+  const { profile, state } = useMyProfile();
+  const [editing, setEditing] = React.useState(false);
+
+  if (auth.status !== 'anon' && auth.status !== 'user') return null;
+
+  const avatar = profile
+    ? avatarFor(profile.id, profile.handle)
+    : auth.userId ? avatarFor(auth.userId) : { initials: '??', tint: t.muted };
+
+  if (editing) {
+    const formKey = profile ? `${profile.id}:${profile.handle}:${profile.name ?? ''}:${profile.bio ?? ''}` : 'new';
+    return (
+      <HandleEditForm
+        key={formKey}
+        t={t}
+        profile={profile}
+        onCancel={() => setEditing(false)}
+        onSaved={() => setEditing(false)}
+      />
+    );
+  }
+
+  if (profile) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '12px 14px', border: `1px solid ${t.line}`, background: t.surface,
+      }}>
+        <Avatar friend={avatar} size={40} t={t} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 1.6,
+            color: t.cream,
+          }}>@{profile.handle}</div>
+          {profile.name && <div style={{
+            fontFamily: LumiereType.body, fontSize: 14, fontStyle: 'italic',
+            color: t.creamDim, marginTop: 2,
+          }}>{profile.name}</div>}
+        </div>
+        <button onClick={() => setEditing(true)} style={{
+          background: 'transparent', border: `1px solid ${t.line}`,
+          padding: '8px 12px', cursor: 'pointer', color: t.creamDim,
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+          textTransform: 'uppercase',
+        }}>edit</button>
+      </div>
+    );
+  }
+
+  if (state !== 'loaded' && state !== 'missing') {
+    return (
+      <div style={{
+        padding: '12px 14px', border: `1px solid ${t.line}`, background: t.surface,
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14, color: t.creamDim,
+      }}>loading profile…</div>
+    );
+  }
+
+  return (
+    <button onClick={() => setEditing(true)} style={{
+      display: 'block', width: '100%', padding: '14px 0',
+      background: 'transparent', color: t.cream, cursor: 'pointer',
+      border: `1px dashed ${t.line}`,
+      fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+      textTransform: 'uppercase',
+    }}>+ claim a handle</button>
+  );
+}
+
+function HandleEditForm({
+  t, profile, onCancel, onSaved,
+}: {
+  t: ReturnType<typeof useTweaks>['theme'];
+  profile: Profile | null;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const [handle, setHandle] = React.useState(profile?.handle ?? '');
+  const [name, setName] = React.useState(profile?.name ?? '');
+  const [bio, setBio] = React.useState(profile?.bio ?? '');
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState<string | null>(null);
+
+  const save = async () => {
+    setSaving(true);
+    setMsg(null);
+    const err = await saveMyProfile({ handle, name, bio });
+    setSaving(false);
+    if (err) { setMsg(err); return; }
+    onSaved();
+  };
+
+  return (
+    <div style={{
+      border: `1px solid ${t.line}`, padding: 14, background: t.surface,
+      display: 'flex', flexDirection: 'column', gap: 10,
+    }}>
+      <Field label="handle" t={t}>
+        <input
+          value={handle}
+          onChange={e => setHandle(e.target.value)}
+          placeholder="yourname"
+          autoCapitalize="off"
+          autoCorrect="off"
+          style={inputStyle(t)}
+        />
+      </Field>
+      <Field label="name" t={t}>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="optional display name"
+          style={inputStyle(t)}
+        />
+      </Field>
+      <Field label="bio" t={t}>
+        <textarea
+          value={bio}
+          onChange={e => setBio(e.target.value)}
+          placeholder="one line about you"
+          rows={2}
+          style={{ ...inputStyle(t), resize: 'vertical' }}
+        />
+      </Field>
+      {msg && <div style={{
+        fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
+        textTransform: 'uppercase', color: t.danger,
+      }}>{msg}</div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+        {profile && (
+          <button onClick={onCancel} style={{
+            flex: 1, padding: '10px 0', background: 'transparent',
+            border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+            textTransform: 'uppercase',
+          }}>cancel</button>
+        )}
+        <button onClick={save} disabled={saving || !handle.trim()} style={{
+          flex: 2, padding: '10px 0', background: t.cream, color: t.bg,
+          border: 'none', cursor: saving ? 'default' : 'pointer',
+          opacity: saving || !handle.trim() ? 0.6 : 1,
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+          textTransform: 'uppercase',
+        }}>{saving ? 'saving…' : profile ? 'save' : 'claim'}</button>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, t, children }: {
+  label: string; t: ReturnType<typeof useTweaks>['theme']; children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+        textTransform: 'uppercase', color: t.muted, marginBottom: 4,
+      }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function inputStyle(t: ReturnType<typeof useTweaks>['theme']): React.CSSProperties {
+  return {
+    width: '100%', padding: 10,
+    background: t.bg, color: t.cream,
+    border: `1px solid ${t.line}`, outline: 'none',
+    fontFamily: LumiereType.mono, fontSize: 12, letterSpacing: 0.5,
+  };
+}
+
+function FollowingStat({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
+  const { ids, state } = useFollowing();
+  const value = state === 'loaded' ? ids.length.toString().padStart(3, '0') : '···';
+  return (
+    <Link href="/friends" style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+      padding: '10px 0', borderBottom: `1px solid ${t.lineSoft}`,
+      textDecoration: 'none', color: 'inherit',
+    }}>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+        textTransform: 'uppercase', color: t.muted,
+      }}>following →</div>
+      <div style={{
+        fontFamily: LumiereType.display, fontSize: 28, lineHeight: 1,
+        color: t.cream, letterSpacing: -0.6,
+      }}>{value}</div>
+    </Link>
   );
 }
 

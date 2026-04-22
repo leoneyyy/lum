@@ -77,3 +77,13 @@ export function Avatar({ friend, size = 32, t }: AvatarProps) {
     }}>{friend.initials}</div>
   );
 }
+
+const AVATAR_TINTS = ['#7a6bc2', '#c94a3f', '#d4f542', '#e89488', '#4a3b7a', '#d4c5f9', '#b8a078', '#7ac29d'];
+export function avatarFor(seed: string, fallbackLabel?: string): { initials: string; tint: string } {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  const tint = AVATAR_TINTS[Math.abs(hash) % AVATAR_TINTS.length];
+  const label = (fallbackLabel ?? seed).replace(/[^a-zA-Z0-9]/g, '');
+  const initials = (label.slice(0, 2) || '??').toUpperCase();
+  return { initials, tint };
+}

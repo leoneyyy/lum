@@ -9,9 +9,10 @@ import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverri
 import { useMyCircleFeed } from '@/app/components/lib/feedStore';
 import { useProfiles } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
+import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
 import type { Film, LogEntry, Profile } from '@/app/components/lib/types';
 import { CryMeter } from '@/app/components/ui/CryMeter';
-import { Avatar, avatarFor } from '@/app/components/ui/Primitives';
+import { Avatar, avatarFor, ReactionButton } from '@/app/components/ui/Primitives';
 
 const FEED_LIMIT = 5;
 
@@ -164,6 +165,27 @@ function CircleFeedSection({
   }
 
   return (
+    <CircleFeedBody
+      entries={feed.entries}
+      films={films}
+      authors={authors}
+      t={t}
+      cryStyle={cryStyle}
+    />
+  );
+}
+
+function CircleFeedBody({
+  entries, films, authors, t, cryStyle,
+}: {
+  entries: LogEntry[];
+  films: Record<string, Film>;
+  authors: Record<string, Profile>;
+  t: ReturnType<typeof useTweaks>['theme'];
+  cryStyle: ReturnType<typeof useTweaks>['tweaks']['cryStyle'];
+}) {
+  const reactions = useReactions(entries.map(e => e.id));
+  return (
     <div style={{ borderTop: `1px solid ${t.line}`, marginTop: 16 }}>
       <div style={{ padding: '24px 20px 8px' }}>
         <div style={{
@@ -175,12 +197,13 @@ function CircleFeedSection({
         display: 'flex', flexDirection: 'column', gap: 14,
         padding: '10px 20px 40px',
       }}>
-        {feed.entries.map(e => (
+        {entries.map(e => (
           <CircleEntryCard
             key={e.id}
             entry={e}
             film={films[e.filmId] || null}
             author={authors[e.userId]}
+            reaction={reactions[e.id] ?? { count: 0, mine: false }}
             t={t}
             cryStyle={cryStyle}
           />
@@ -191,11 +214,12 @@ function CircleFeedSection({
 }
 
 function CircleEntryCard({
-  entry, film, author, t, cryStyle,
+  entry, film, author, reaction, t, cryStyle,
 }: {
   entry: LogEntry;
   film: Film | null;
   author: Profile | undefined;
+  reaction: { count: number; mine: boolean };
   t: ReturnType<typeof useTweaks>['theme'];
   cryStyle: ReturnType<typeof useTweaks>['tweaks']['cryStyle'];
 }) {
@@ -259,6 +283,15 @@ function CircleEntryCard({
       )}
 
       <CryMeter value={entry.cry} t={t} style={cryStyle} />
+
+      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+        <ReactionButton
+          count={reaction.count}
+          mine={reaction.mine}
+          t={t}
+          onToggle={() => void toggleReaction(entry.id)}
+        />
+      </div>
     </article>
   );
 }

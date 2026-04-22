@@ -10,8 +10,9 @@ import { useFollowing, follow, unfollow } from '@/app/components/lib/followStore
 import { usePublicEntriesByUser } from '@/app/components/lib/feedStore';
 import { useFilmsForEntries } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
+import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
 import type { Film, LogEntry, Profile } from '@/app/components/lib/types';
-import { Avatar, avatarFor, Eyebrow } from '@/app/components/ui/Primitives';
+import { Avatar, avatarFor, Eyebrow, ReactionButton } from '@/app/components/ui/Primitives';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import { Poster } from '@/app/components/ui/Poster';
 
@@ -35,6 +36,7 @@ export default function UserPage() {
   const profile: Profile | null = result?.handle === handle ? result.profile : null;
   const userId = profile?.id ?? '';
   const feed = usePublicEntriesByUser(userId, 40);
+  const reactions = useReactions(feed.entries.map(e => e.id));
   const rawFilms = useFilmsForEntries(feed.entries);
   const overrides = useFilmOverrides();
   const films = React.useMemo<Record<string, Film>>(() => {
@@ -121,6 +123,7 @@ export default function UserPage() {
                 key={e.id}
                 entry={e}
                 film={films[e.filmId] || null}
+                reaction={reactions[e.id] ?? { count: 0, mine: false }}
                 t={t}
                 cryStyle={tweaks.cryStyle}
               />
@@ -161,10 +164,11 @@ function FollowButton({
 }
 
 function PublicEntryCard({
-  entry, film, t, cryStyle,
+  entry, film, reaction, t, cryStyle,
 }: {
   entry: LogEntry;
   film: Film | null;
+  reaction: { count: number; mine: boolean };
   t: ReturnType<typeof useTweaks>['theme'];
   cryStyle: ReturnType<typeof useTweaks>['tweaks']['cryStyle'];
 }) {
@@ -197,6 +201,14 @@ function PublicEntryCard({
             color: t.creamDim, lineHeight: 1.4, marginTop: 10,
           }}>{entry.note}</div>
         )}
+        <div style={{ marginTop: 10 }}>
+          <ReactionButton
+            count={reaction.count}
+            mine={reaction.mine}
+            t={t}
+            onToggle={() => void toggleReaction(entry.id)}
+          />
+        </div>
       </div>
     </article>
   );

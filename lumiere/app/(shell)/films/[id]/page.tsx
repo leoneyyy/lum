@@ -1,20 +1,24 @@
 'use client';
 import React from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType, DEFAULT_DIMS, LumiereVoice } from '@/app/components/lib/tokens';
 import type { DimKey } from '@/app/components/lib/tokens';
 import { getFilm } from '@/app/components/lib/api';
-import type { Film, RatingMap, Visibility } from '@/app/components/lib/types';
+import type { Film, LogEntry, Profile, RatingMap, Visibility } from '@/app/components/lib/types';
 import { Poster } from '@/app/components/ui/Poster';
 import { CryMeter } from '@/app/components/ui/CryMeter';
-import { RatingRow, Eyebrow } from '@/app/components/ui/Primitives';
+import { RatingRow, Eyebrow, Avatar, avatarFor } from '@/app/components/ui/Primitives';
 import { saveEntry, useFilmEntries, deleteEntry } from '@/app/components/lib/logStore';
 import {
   useFilmOverride, setFilmOverride, applyOverride,
 } from '@/app/components/lib/filmOverrides';
 import type { FilmOverride } from '@/app/components/lib/filmOverrides';
 import { ImagePicker } from '@/app/components/ui/ImagePicker';
+import { useCircleEntriesForFilm } from '@/app/components/lib/feedStore';
+import { useProfiles } from '@/app/components/lib/profileStore';
+import { useFollowing } from '@/app/components/lib/followStore';
 
 export default function FilmDetailPage() {
   const params = useParams<{ id: string }>();
@@ -274,6 +278,8 @@ export default function FilmDetailPage() {
         </div>
       )}
 
+      <CircleForFilm filmId={id} t={t} />
+
       {picker && (
         <ImagePicker
           filmId={id}
@@ -299,6 +305,99 @@ function MetaRow({ t, items }: { t: ReturnType<typeof useTweaks>['theme']; items
       fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
       textTransform: 'uppercase', color: t.muted,
     }}>{items.join(' · ')}</div>
+  );
+}
+
+function CircleForFilm({ filmId, t }: {
+  filmId: string;
+  t: ReturnType<typeof useTweaks>['theme'];
+}) {
+  const { ids: followingIds, state: followState } = useFollowing();
+  const feed = useCircleEntriesForFilm(filmId, 10);
+  const authors = useProfiles(feed.entries.map(e => e.userId));
+
+  if (followState !== 'loaded' || followingIds.length === 0) return null;
+  if (feed.state === 'loading') return null;
+  if (feed.state === 'error') return null;
+
+  return (
+    <div style={{
+      padding: '8px 20px 40px', borderTop: `1px solid ${t.line}`,
+      marginTop: 8,
+    }}>
+      <Eyebrow
+        num={String(feed.entries.length).padStart(2, '0')}
+        label="your circle on this"
+        t={t}
+        style={{ margin: '24px 0 14px' }}
+      />
+      {feed.entries.length === 0 ? (
+        <div style={{
+          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+          color: t.creamDim,
+        }}>no one in your circle has logged this yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {feed.entries.map(e => (
+            <CircleEntry
+              key={e.id}
+              entry={e}
+              author={authors[e.userId]}
+              t={t}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CircleEntry({ entry, author, t }: {
+  entry: LogEntry;
+  author: Profile | undefined;
+  t: ReturnType<typeof useTweaks>['theme'];
+}) {
+  const date = new Date(entry.createdAt).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric',
+  }).toLowerCase();
+  const avatar = author
+    ? avatarFor(author.id, author.handle)
+    : avatarFor(entry.userId);
+
+  const header = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+      <Avatar friend={avatar} size={28} t={t} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+          color: t.cream,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>@{author?.handle ?? '…'}</div>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4,
+          textTransform: 'uppercase', color: t.muted, marginTop: 2,
+        }}>{date} · cry {entry.cry}</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <article style={{
+      borderLeft: `2px solid ${t.accent}`, paddingLeft: 12,
+    }}>
+      {author?.handle ? (
+        <Link href={`/u/${encodeURIComponent(author.handle)}`} style={{
+          display: 'block', color: 'inherit', textDecoration: 'none',
+        }}>{header}</Link>
+      ) : header}
+      {entry.note && (
+        <blockquote style={{
+          margin: 0, padding: 0,
+          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+          lineHeight: 1.4, color: t.cream,
+        }}>{entry.note}</blockquote>
+      )}
+    </article>
   );
 }
 

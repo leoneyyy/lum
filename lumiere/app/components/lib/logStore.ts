@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import type { LogEntry, RatingMap } from './types';
+import type { LogEntry, RatingMap, Visibility } from './types';
 import { getSupabase } from './supabase';
 
 const LOCAL_KEY = 'lumiere:log';
@@ -14,15 +14,23 @@ type Row = {
   ratings: RatingMap | null;
   note: string | null;
   created_at: string;
+  visibility?: Visibility | null;
 };
 
 let mode: Mode = 'local';
 let userId: string | null = null;
-let cache: LogEntry[] | null = null;
+let cache: LogEntry[] = [];
+let initialized = false;
 let realtimeUnsub: (() => void) | null = null;
 const listeners = new Set<() => void>();
 
 const notify = () => { for (const cb of listeners) cb(); };
+
+function ensureInit() {
+  if (initialized || typeof window === 'undefined') return;
+  initialized = true;
+  cache = readLocal();
+}
 
 function readLocal(): LogEntry[] {
   if (typeof window === 'undefined') return [];
@@ -45,6 +53,7 @@ function rowToEntry(r: Row): LogEntry {
     ratings: (r.ratings ?? {}) as RatingMap,
     note: r.note ?? undefined,
     createdAt: r.created_at,
+    visibility: (r.visibility ?? 'private') as Visibility,
   };
 }
 
@@ -105,11 +114,12 @@ export function setBackendUser(nextUserId: string | null) {
   }
 }
 
-function snapshot(): LogEntry[] { return cache ?? []; }
-function serverSnapshot(): LogEntry[] { return []; }
+const EMPTY: LogEntry[] = [];
+function snapshot(): LogEntry[] { ensureInit(); return cache; }
+function serverSnapshot(): LogEntry[] { return EMPTY; }
 
 function subscribe(cb: () => void): () => void {
-  if (cache === null) cache = readLocal();
+  ensureInit();
   listeners.add(cb);
   const onStorage = (e: StorageEvent) => {
     if (mode === 'local' && e.key === LOCAL_KEY) {
@@ -144,7 +154,7 @@ function newId(): string {
 }
 
 export function saveEntry(input: {
-  filmId: string; cry: number; ratings: RatingMap; note?: string;
+  filmId: string; cry: number; ratings: RatingMap; note?: string; visibility?: Visibility;
 }): LogEntry {
   const entry: LogEntry = {
     id: newId(),
@@ -154,8 +164,9 @@ export function saveEntry(input: {
     ratings: input.ratings,
     note: input.note?.trim() || undefined,
     createdAt: new Date().toISOString(),
+    visibility: input.visibility ?? 'private',
   };
-  cache = [entry, ...(cache ?? [])];
+  cache = [entry, ...(cache)];
   notify();
 
   if (mode === 'remote') {
@@ -169,10 +180,11 @@ export function saveEntry(input: {
         ratings: entry.ratings,
         note: entry.note ?? null,
         created_at: entry.createdAt,
+        visibility: entry.visibility,
       }).then(({ error }) => {
         if (error) {
           console.error('[lumiere] log insert failed', error.message);
-          cache = (cache ?? []).filter(e => e.id !== entry.id);
+          cache = (cache).filter(e => e.id !== entry.id);
           notify();
         }
       });
@@ -184,8 +196,31 @@ export function saveEntry(input: {
   return entry;
 }
 
+export function setEntryVisibility(id: string, visibility: Visibility): void {
+  const prev = cache;
+  const target = prev.find(e => e.id === id);
+  if (!target || target.visibility === visibility) return;
+  cache = prev.map(e => e.id === id ? { ...e, visibility } : e);
+  notify();
+
+  if (mode === 'remote') {
+    const sb = getSupabase();
+    if (sb && userId) {
+      void sb.from('log_entries').update({ visibility }).eq('id', id).then(({ error }) => {
+        if (error) {
+          console.error('[lumiere] visibility update failed', error.message);
+          cache = cache.map(e => e.id === id ? { ...e, visibility: target.visibility } : e);
+          notify();
+        }
+      });
+    }
+  } else {
+    writeLocal(cache);
+  }
+}
+
 export function deleteEntry(id: string): void {
-  const prev = cache ?? [];
+  const prev = cache;
   const victim = prev.find(e => e.id === id);
   cache = prev.filter(e => e.id !== id);
   notify();
@@ -197,7 +232,7 @@ export function deleteEntry(id: string): void {
         if (error) {
           console.error('[lumiere] log delete failed', error.message);
           if (victim) {
-            cache = [victim, ...(cache ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+            cache = [victim, ...(cache)].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
             notify();
           }
         }

@@ -28,6 +28,8 @@ export interface RatingMap {
   rewatch?: number; ending?: number;
 }
 
+export type Visibility = 'private' | 'public';
+
 export interface LogEntry {
   id: string;
   userId: string;
@@ -35,6 +37,15 @@ export interface LogEntry {
   cry: number;           // 0..100
   ratings: RatingMap;
   note?: string;
+  createdAt: string;
+  visibility: Visibility;
+}
+
+export interface Profile {
+  id: string;
+  handle: string;
+  name?: string;
+  bio?: string;
   createdAt: string;
 }
 

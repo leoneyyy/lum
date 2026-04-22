@@ -5,11 +5,16 @@ import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType, DEFAULT_DIMS, LumiereVoice } from '@/app/components/lib/tokens';
 import type { DimKey } from '@/app/components/lib/tokens';
 import { getFilm } from '@/app/components/lib/api';
-import type { Film, RatingMap } from '@/app/components/lib/types';
+import type { Film, RatingMap, Visibility } from '@/app/components/lib/types';
 import { Poster } from '@/app/components/ui/Poster';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import { RatingRow, Eyebrow } from '@/app/components/ui/Primitives';
 import { saveEntry, useFilmEntries, deleteEntry } from '@/app/components/lib/logStore';
+import {
+  useFilmOverride, setFilmOverride, applyOverride,
+} from '@/app/components/lib/filmOverrides';
+import type { FilmOverride } from '@/app/components/lib/filmOverrides';
+import { ImagePicker } from '@/app/components/ui/ImagePicker';
 
 export default function FilmDetailPage() {
   const params = useParams<{ id: string }>();
@@ -28,13 +33,22 @@ export default function FilmDetailPage() {
   }, [id]);
 
   const loading = loaded?.id !== id;
-  const film = loading ? null : loaded?.film ?? null;
+  const rawFilm = loading ? null : loaded?.film ?? null;
   const err = loading ? null : loaded?.err ?? null;
 
+  const override = useFilmOverride(id);
+  const film = rawFilm ? applyOverride(rawFilm, override) : null;
+  const defaults = React.useMemo<FilmOverride>(() => ({
+    posterUrl: rawFilm?.posterUrl ?? undefined,
+    backdropUrl: rawFilm?.backdropUrl ?? undefined,
+  }), [rawFilm?.posterUrl, rawFilm?.backdropUrl]);
+
+  const [picker, setPicker] = React.useState<null | 'poster' | 'backdrop'>(null);
   const [open, setOpen] = React.useState(false);
   const [cry, setCry] = React.useState(0);
   const [ratings, setRatings] = React.useState<RatingMap>({});
   const [note, setNote] = React.useState('');
+  const [visibility, setVisibility] = React.useState<Visibility>('private');
 
   const activeDims = React.useMemo(
     () => DEFAULT_DIMS.filter(d => tweaks.dims.includes(d.key as DimKey)),
@@ -43,9 +57,9 @@ export default function FilmDetailPage() {
 
   const submit = () => {
     if (!film) return;
-    saveEntry({ filmId: film.id, cry, ratings, note });
+    saveEntry({ filmId: film.id, cry, ratings, note, visibility });
     setOpen(false);
-    setCry(0); setRatings({}); setNote('');
+    setCry(0); setRatings({}); setNote(''); setVisibility('private');
   };
 
   if (loading) return <CenterNote t={t} text="loading…" />;
@@ -66,6 +80,24 @@ export default function FilmDetailPage() {
             position: 'absolute', inset: 0,
             background: `linear-gradient(180deg, transparent 40%, ${t.bg})`,
           }} />
+          <button onClick={() => setPicker('backdrop')} style={{
+            position: 'absolute', top: 12, right: 12,
+            padding: '6px 10px', cursor: 'pointer',
+            background: 'rgba(0,0,0,0.5)', color: t.cream,
+            border: `1px solid ${t.line}`,
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+            textTransform: 'uppercase',
+          }}>change backdrop</button>
+        </div>
+      )}
+      {!film.backdropUrl && (
+        <div style={{ padding: '14px 20px 0' }}>
+          <button onClick={() => setPicker('backdrop')} style={{
+            padding: '8px 12px', cursor: 'pointer', background: 'transparent',
+            color: t.creamDim, border: `1px solid ${t.line}`,
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+            textTransform: 'uppercase',
+          }}>+ add backdrop</button>
         </div>
       )}
 
@@ -77,7 +109,15 @@ export default function FilmDetailPage() {
         }}>← back</button>
 
         <div style={{ display: 'flex', gap: 16 }}>
-          <Poster film={film} size="md" t={t} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Poster film={film} size="md" t={t} />
+            <button onClick={() => setPicker('poster')} style={{
+              padding: '6px 0', cursor: 'pointer', background: 'transparent',
+              color: t.creamDim, border: `1px solid ${t.line}`,
+              fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4,
+              textTransform: 'uppercase', textAlign: 'center',
+            }}>change</button>
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               fontFamily: LumiereType.display, fontSize: 32, lineHeight: 1,
@@ -164,6 +204,24 @@ export default function FilmDetailPage() {
               }}
             />
 
+            <div style={{ height: 14 }} />
+            <Eyebrow num="◓" label="visibility" t={t} style={{ marginBottom: 8 }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['private', 'public'] as Visibility[]).map(v => {
+                const active = visibility === v;
+                return (
+                  <button key={v} onClick={() => setVisibility(v)} style={{
+                    flex: 1, padding: '10px 0', cursor: 'pointer',
+                    background: active ? t.cream : 'transparent',
+                    color: active ? t.bg : t.creamDim,
+                    border: `1px solid ${active ? t.cream : t.line}`,
+                    fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+                    textTransform: 'uppercase',
+                  }}>{v === 'private' ? 'just me' : 'followers'}</button>
+                );
+              })}
+            </div>
+
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
               <button onClick={() => setOpen(false)} style={{
                 flex: 1, padding: '12px 0', background: 'transparent',
@@ -214,6 +272,22 @@ export default function FilmDetailPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {picker && (
+        <ImagePicker
+          filmId={id}
+          kind={picker}
+          current={picker === 'poster' ? film.posterUrl : film.backdropUrl}
+          defaultUrl={picker === 'poster' ? defaults.posterUrl : defaults.backdropUrl}
+          t={t}
+          onPick={url => {
+            const key = picker === 'poster' ? 'posterUrl' : 'backdropUrl';
+            if (url === null) setFilmOverride(id, { [key]: undefined });
+            else setFilmOverride(id, { [key]: url });
+          }}
+          onClose={() => setPicker(null)}
+        />
       )}
     </div>
   );

@@ -96,17 +96,29 @@ function EntryCard({
             fontFamily: LumiereType.display, fontSize: 20, lineHeight: 1,
             color: t.cream, letterSpacing: -0.4,
           }}>{film?.title || 'unknown film'}</div>
-          <button onClick={() => deleteEntry(entry.id)} style={{
-            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-            fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4,
-            textTransform: 'uppercase', color: t.muted,
-          }}>erase</button>
+          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+            {film && (
+              <Link
+                href={`/films/${encodeURIComponent(film.id)}?edit=${encodeURIComponent(entry.id)}`}
+                style={{
+                  padding: 0, textDecoration: 'none',
+                  fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4,
+                  textTransform: 'uppercase', color: t.creamDim,
+                }}
+              >edit</Link>
+            )}
+            <button onClick={() => deleteEntry(entry.id)} style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4,
+              textTransform: 'uppercase', color: t.muted,
+            }}>erase</button>
+          </div>
         </div>
         <div style={{
           fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.6,
           textTransform: 'uppercase', color: t.muted, marginBottom: 10,
         }}>
-          {new Date(entry.createdAt).toLocaleDateString()} · {ratingCount} dim · cry {entry.cry}
+          {new Date(entry.createdAt).toLocaleDateString()} · {ratingCount} dim · cry {entry.cry} · {entry.visibility === 'public' ? 'public' : 'private'}
         </div>
         <CryMeter value={entry.cry} t={t} style={style} />
         {entry.note && (

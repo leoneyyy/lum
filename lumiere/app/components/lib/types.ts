@@ -47,6 +47,8 @@ export interface Profile {
   name?: string;
   bio?: string;
   createdAt: string;
+  topFilms: string[];
+  topSeries: string[];
 }
 
 export interface Friend {

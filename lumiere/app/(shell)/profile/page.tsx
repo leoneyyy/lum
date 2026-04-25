@@ -6,15 +6,18 @@ import {
   LumiereType, LumiereThemes, DEFAULT_DIMS,
 } from '@/app/components/lib/tokens';
 import type { ThemeKey, Voice, DimKey } from '@/app/components/lib/tokens';
-import type { Profile } from '@/app/components/lib/types';
+import type { Film, MediaKind, Profile } from '@/app/components/lib/types';
 import { useLog } from '@/app/components/lib/logStore';
 import { useAuth } from '@/app/components/AuthProvider';
-import { useMyProfile, saveMyProfile } from '@/app/components/lib/profileStore';
+import { useMyProfile, saveMyProfile, setTopPicks } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
+import { useFilmsForEntries } from '@/app/components/lib/useFilms';
+import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import { startEmailAuth, signOut } from '@/app/components/lib/auth';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import type { CryStyle } from '@/app/components/ui/CryMeter';
 import { Eyebrow, Avatar, avatarFor } from '@/app/components/ui/Primitives';
+import { TopPicksGrid, TopPicksPicker } from '@/app/components/ui/TopPicks';
 
 const THEMES: ThemeKey[] = ['indigo', 'oxblood', 'bone', 'acid'];
 const VOICES: Voice[] = ['dry', 'poetic', 'playful'];
@@ -64,7 +67,11 @@ export default function ProfilePage() {
         <FollowingStat t={t} />
 
         <div style={{ height: 28 }} />
-        <Eyebrow num="02" label="theme" t={t} style={{ marginBottom: 12 }} />
+        <Eyebrow num="02" label="canon" t={t} style={{ marginBottom: 12 }} />
+        <TopPicksOwnBlock t={t} />
+
+        <div style={{ height: 28 }} />
+        <Eyebrow num="03" label="theme" t={t} style={{ marginBottom: 12 }} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
           {THEMES.map(key => {
             const th = LumiereThemes[key];
@@ -90,7 +97,7 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ height: 28 }} />
-        <Eyebrow num="03" label="cry style" t={t} style={{ marginBottom: 12 }} />
+        <Eyebrow num="04" label="cry style" t={t} style={{ marginBottom: 12 }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {CRY_STYLES.map(s => {
             const active = tweaks.cryStyle === s;
@@ -111,7 +118,7 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ height: 28 }} />
-        <Eyebrow num="04" label="voice" t={t} style={{ marginBottom: 12 }} />
+        <Eyebrow num="05" label="voice" t={t} style={{ marginBottom: 12 }} />
         <div style={{ display: 'flex', gap: 8 }}>
           {VOICES.map(v => {
             const active = tweaks.voice === v;
@@ -129,7 +136,7 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ height: 28 }} />
-        <Eyebrow num="05" label="dimensions" t={t} style={{ marginBottom: 12 }} />
+        <Eyebrow num="06" label="dimensions" t={t} style={{ marginBottom: 12 }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {DEFAULT_DIMS.map(d => {
             const active = tweaks.dims.includes(d.key as DimKey);
@@ -570,6 +577,83 @@ function Stat({ t, label, value }: { t: ReturnType<typeof useTweaks>['theme']; l
         fontFamily: LumiereType.display, fontSize: 28, lineHeight: 1,
         color: t.cream, letterSpacing: -0.6,
       }}>{value}</div>
+    </div>
+  );
+}
+
+function TopPicksOwnBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
+  const { profile } = useMyProfile();
+  const entries = useLog();
+  const rawFilms = useFilmsForEntries(entries);
+  const overrides = useFilmOverrides();
+  const films = React.useMemo<Record<string, Film>>(() => {
+    const out: Record<string, Film> = {};
+    for (const [id, f] of Object.entries(rawFilms)) {
+      out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
+    }
+    return out;
+  }, [rawFilms, overrides]);
+
+  const [picker, setPicker] = React.useState<MediaKind | null>(null);
+
+  if (!profile) {
+    return (
+      <div style={{
+        padding: '12px 14px', border: `1px dashed ${t.line}`,
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
+        color: t.creamDim,
+      }}>claim a handle first to set your top picks.</div>
+    );
+  }
+
+  const addPick = async (kind: MediaKind, filmId: string) => {
+    if (kind === 'film') {
+      const next = [...profile.topFilms.filter(id => id !== filmId), filmId].slice(-4);
+      await setTopPicks({ topFilms: next });
+    } else {
+      const next = [...profile.topSeries.filter(id => id !== filmId), filmId].slice(-4);
+      await setTopPicks({ topSeries: next });
+    }
+    setPicker(null);
+  };
+
+  const removePick = async (kind: MediaKind, filmId: string) => {
+    if (kind === 'film') {
+      await setTopPicks({ topFilms: profile.topFilms.filter(id => id !== filmId) });
+    } else {
+      await setTopPicks({ topSeries: profile.topSeries.filter(id => id !== filmId) });
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <TopPicksGrid
+        picks={profile.topFilms}
+        films={films}
+        t={t}
+        label="top films"
+        onAdd={profile.topFilms.length < 4 ? () => setPicker('film') : undefined}
+        onRemove={(id) => void removePick('film', id)}
+      />
+      <TopPicksGrid
+        picks={profile.topSeries}
+        films={films}
+        t={t}
+        label="top series"
+        onAdd={profile.topSeries.length < 4 ? () => setPicker('series') : undefined}
+        onRemove={(id) => void removePick('series', id)}
+      />
+      {picker && (
+        <TopPicksPicker
+          kind={picker}
+          entries={entries}
+          films={films}
+          current={picker === 'film' ? profile.topFilms : profile.topSeries}
+          t={t}
+          onPick={(id) => void addPick(picker, id)}
+          onClose={() => setPicker(null)}
+        />
+      )}
     </div>
   );
 }

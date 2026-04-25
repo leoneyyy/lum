@@ -8,11 +8,12 @@ import { useAuth } from '@/app/components/AuthProvider';
 import { fetchProfileByHandle, useMyProfile } from '@/app/components/lib/profileStore';
 import { useFollowing, follow, unfollow } from '@/app/components/lib/followStore';
 import { usePublicEntriesByUser } from '@/app/components/lib/feedStore';
-import { useFilmsForEntries } from '@/app/components/lib/useFilms';
+import { useFilmsForEntries, useFilmsByIds } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
 import type { Film, LogEntry, Profile } from '@/app/components/lib/types';
 import { Avatar, avatarFor, Eyebrow, ReactionButton } from '@/app/components/ui/Primitives';
+import { TopPicksGrid } from '@/app/components/ui/TopPicks';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import { Poster } from '@/app/components/ui/Poster';
 
@@ -38,14 +39,19 @@ export default function UserPage() {
   const feed = usePublicEntriesByUser(userId, 40);
   const reactions = useReactions(feed.entries.map(e => e.id));
   const rawFilms = useFilmsForEntries(feed.entries);
+  const pickIds = React.useMemo(
+    () => [...(profile?.topFilms ?? []), ...(profile?.topSeries ?? [])],
+    [profile?.topFilms, profile?.topSeries],
+  );
+  const pickFilms = useFilmsByIds(pickIds);
   const overrides = useFilmOverrides();
   const films = React.useMemo<Record<string, Film>>(() => {
-    const out: Record<string, Film> = {};
+    const out: Record<string, Film> = { ...pickFilms };
     for (const [id, f] of Object.entries(rawFilms)) {
       out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
     }
     return out;
-  }, [rawFilms, overrides]);
+  }, [rawFilms, overrides, pickFilms]);
 
   if (isLoading) return <Center t={t} text="loading…" />;
   if (!profile) return <Center t={t} text={`no one named @${handle}`} />;
@@ -98,6 +104,20 @@ export default function UserPage() {
           }}>this is your public page</div>
         )}
       </div>
+
+      {(profile.topFilms.length > 0 || profile.topSeries.length > 0) && (
+        <div style={{ padding: '20px', borderBottom: `1px solid ${t.line}` }}>
+          <Eyebrow num="◆" label="canon" t={t} style={{ marginBottom: 14 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {profile.topFilms.length > 0 && (
+              <TopPicksGrid picks={profile.topFilms} films={films} t={t} label="top films" />
+            )}
+            {profile.topSeries.length > 0 && (
+              <TopPicksGrid picks={profile.topSeries} films={films} t={t} label="top series" />
+            )}
+          </div>
+        </div>
+      )}
 
       <div style={{ padding: '20px' }}>
         <Eyebrow num="§" label={isSelf ? 'your public log' : 'public log'} t={t} style={{ marginBottom: 16 }} />

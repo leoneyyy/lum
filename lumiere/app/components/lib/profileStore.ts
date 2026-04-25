@@ -9,6 +9,8 @@ type Row = {
   name: string | null;
   bio: string | null;
   created_at: string;
+  top_films: string[] | null;
+  top_series: string[] | null;
 };
 
 function rowToProfile(r: Row): Profile {
@@ -18,6 +20,8 @@ function rowToProfile(r: Row): Profile {
     name: r.name ?? undefined,
     bio: r.bio ?? undefined,
     createdAt: r.created_at,
+    topFilms: r.top_films ?? [],
+    topSeries: r.top_series ?? [],
   };
 }
 
@@ -114,6 +118,38 @@ export async function saveMyProfile(patch: { handle?: string; name?: string; bio
   }
   myProfile = rowToProfile(data as Row);
   myProfileState = 'loaded';
+  notifyMine();
+  return null;
+}
+
+export async function setTopPicks(patch: { topFilms?: string[]; topSeries?: string[] }): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb || !myUserId || !myProfile) return 'not signed in';
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.topFilms) update.top_films = patch.topFilms.slice(0, 4);
+  if (patch.topSeries) update.top_series = patch.topSeries.slice(0, 4);
+
+  // optimistic
+  const prev = myProfile;
+  myProfile = {
+    ...myProfile,
+    topFilms: patch.topFilms ? patch.topFilms.slice(0, 4) : myProfile.topFilms,
+    topSeries: patch.topSeries ? patch.topSeries.slice(0, 4) : myProfile.topSeries,
+  };
+  notifyMine();
+
+  const { data, error } = await sb
+    .from('profiles')
+    .update(update)
+    .eq('id', myUserId)
+    .select()
+    .single();
+  if (error) {
+    myProfile = prev;
+    notifyMine();
+    return error.message;
+  }
+  myProfile = rowToProfile(data as Row);
   notifyMine();
   return null;
 }

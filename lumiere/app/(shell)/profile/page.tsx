@@ -2,574 +2,279 @@
 import React from 'react';
 import Link from 'next/link';
 import { useTweaks } from '@/app/components/TweaksProvider';
-import {
-  LumiereType, LumiereThemes, DEFAULT_DIMS,
-} from '@/app/components/lib/tokens';
-import type { ThemeKey, Voice, DimKey } from '@/app/components/lib/tokens';
-import type { Profile } from '@/app/components/lib/types';
-import { useLog } from '@/app/components/lib/logStore';
+import { LumiereType } from '@/app/components/lib/tokens';
+import type { Theme } from '@/app/components/lib/tokens';
 import { useAuth } from '@/app/components/AuthProvider';
-import { useMyProfile, saveMyProfile } from '@/app/components/lib/profileStore';
-import { useFollowing } from '@/app/components/lib/followStore';
-import { startEmailAuth, signOut } from '@/app/components/lib/auth';
+import { useMyProfile } from '@/app/components/lib/profileStore';
+import { usePublicEntriesByUser } from '@/app/components/lib/feedStore';
+import { useFilmsForEntries } from '@/app/components/lib/useFilms';
+import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
+import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
+import type { Film, LogEntry } from '@/app/components/lib/types';
+import { Avatar, avatarFor, Eyebrow, ReactionButton } from '@/app/components/ui/Primitives';
 import { CryMeter } from '@/app/components/ui/CryMeter';
-import type { CryStyle } from '@/app/components/ui/CryMeter';
-import { Eyebrow, Avatar, avatarFor } from '@/app/components/ui/Primitives';
-
-const THEMES: ThemeKey[] = ['indigo', 'oxblood', 'bone', 'acid'];
-const VOICES: Voice[] = ['dry', 'poetic', 'playful'];
-const CRY_STYLES: CryStyle[] = ['bar', 'dots', 'wave'];
+import { Poster } from '@/app/components/ui/Poster';
 
 export default function ProfilePage() {
-  const { theme: t, tweaks, setTweaks } = useTweaks();
-  const entries = useLog();
+  const { theme: t, tweaks } = useTweaks();
   const auth = useAuth();
-  const avg = entries.length ? Math.round(entries.reduce((s, e) => s + e.cry, 0) / entries.length) : 0;
-  const max = entries.reduce((m, e) => Math.max(m, e.cry), 0);
+  const { profile, state } = useMyProfile();
 
-  const toggleDim = (k: DimKey) => setTweaks(prev => ({
-    ...prev,
-    dims: prev.dims.includes(k) ? prev.dims.filter(d => d !== k) : [...prev.dims, k],
-  }));
+  const userId = profile?.id ?? '';
+  const feed = usePublicEntriesByUser(userId, 40);
+  const reactions = useReactions(feed.entries.map(e => e.id));
+  const rawFilms = useFilmsForEntries(feed.entries);
+  const overrides = useFilmOverrides();
+  const films = React.useMemo<Record<string, Film>>(() => {
+    const out: Record<string, Film> = {};
+    for (const [id, f] of Object.entries(rawFilms)) {
+      out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
+    }
+    return out;
+  }, [rawFilms, overrides]);
+
+  const showHeaderRow = (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      marginBottom: 16,
+    }}>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+        textTransform: 'uppercase', color: t.muted,
+      }}>§ self</div>
+      <SettingsLink t={t} />
+    </div>
+  );
+
+  if (auth.status === 'init') {
+    return (
+      <div style={{ padding: '20px' }}>
+        {showHeaderRow}
+        <Center t={t} text="connecting…" />
+      </div>
+    );
+  }
+
+  if (auth.status === 'disabled' || auth.status === 'error') {
+    return (
+      <div style={{ padding: '20px' }}>
+        {showHeaderRow}
+        <EmptyClaim t={t} text="set up an identity in the workshop." />
+      </div>
+    );
+  }
+
+  if (!profile) {
+    if (state !== 'loaded' && state !== 'missing') {
+      return (
+        <div style={{ padding: '20px' }}>
+          {showHeaderRow}
+          <Center t={t} text="loading profile…" />
+        </div>
+      );
+    }
+    return (
+      <div style={{ padding: '20px' }}>
+        {showHeaderRow}
+        <EmptyClaim t={t} text="you haven't claimed a handle yet." />
+      </div>
+    );
+  }
+
+  const avatar = avatarFor(profile.id, profile.handle);
 
   return (
     <div>
       <div style={{ padding: '20px 20px 24px', borderBottom: `1px solid ${t.line}` }}>
         <div style={{
-          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-          textTransform: 'uppercase', color: t.muted, marginBottom: 12,
-        }}>§ self</div>
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 16,
+        }}>
+          <div style={{
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+            textTransform: 'uppercase', color: t.muted,
+          }}>§ self</div>
+          <SettingsLink t={t} />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <Avatar friend={avatar} size={64} t={t} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: LumiereType.display, fontSize: 32, lineHeight: 1,
+              color: t.cream, letterSpacing: -0.8,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>@{profile.handle}</div>
+            {profile.name && (
+              <div style={{
+                fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 16,
+                color: t.creamDim, marginTop: 4,
+              }}>{profile.name}</div>
+            )}
+          </div>
+        </div>
+
+        {profile.bio && (
+          <div style={{
+            fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+            color: t.creamDim, marginTop: 14, lineHeight: 1.45,
+          }}>{profile.bio}</div>
+        )}
+
         <div style={{
-          fontFamily: LumiereType.display, fontSize: 48, lineHeight: 0.95,
-          color: t.cream, letterSpacing: -1.4, marginBottom: 10,
-        }}>the<br/><span style={{ fontStyle: 'italic', color: t.signal }}>witness</span></div>
-        <div style={{
-          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
-          color: t.creamDim,
-        }}>recorder of {entries.length} nights.</div>
+          marginTop: 16, padding: '10px 12px', border: `1px dashed ${t.line}`,
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+          textTransform: 'uppercase', color: t.muted, textAlign: 'center',
+        }}>this is your public page</div>
       </div>
 
       <div style={{ padding: '20px' }}>
-        <Eyebrow num="00" label="identity" t={t} style={{ marginBottom: 12 }} />
-        <AuthStrip auth={auth} t={t} />
-
-        <div style={{ height: 18 }} />
-        <HandleBlock t={t} />
-
-        <div style={{ height: 28 }} />
-        <Eyebrow num="01" label="instrument" t={t} style={{ marginBottom: 12 }} />
-        <Stat t={t} label="logged" value={entries.length.toString().padStart(3, '0')} />
-        <Stat t={t} label="avg cry" value={avg.toString().padStart(3, '0')} />
-        <Stat t={t} label="peak cry" value={max.toString().padStart(3, '0')} />
-        <FollowingStat t={t} />
-
-        <div style={{ height: 28 }} />
-        <Eyebrow num="02" label="theme" t={t} style={{ marginBottom: 12 }} />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-          {THEMES.map(key => {
-            const th = LumiereThemes[key];
-            const active = tweaks.theme === key;
-            return (
-              <button key={key} onClick={() => setTweaks(p => ({ ...p, theme: key }))} style={{
-                padding: 12, cursor: 'pointer', textAlign: 'left',
-                background: th.bg, color: th.cream,
-                border: `1px solid ${active ? th.cream : t.line}`,
-              }}>
-                <div style={{
-                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
-                  textTransform: 'uppercase', color: th.muted, marginBottom: 6,
-                }}>{key}</div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {[th.cream, th.signal, th.accent, th.muted].map((c, i) => (
-                    <div key={i} style={{ flex: 1, height: 16, background: c }} />
-                  ))}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ height: 28 }} />
-        <Eyebrow num="03" label="cry style" t={t} style={{ marginBottom: 12 }} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {CRY_STYLES.map(s => {
-            const active = tweaks.cryStyle === s;
-            return (
-              <button key={s} onClick={() => setTweaks(p => ({ ...p, cryStyle: s }))} style={{
-                padding: '12px 14px', cursor: 'pointer', textAlign: 'left',
-                background: active ? t.surface : 'transparent',
-                color: 'inherit', border: `1px solid ${active ? t.cream : t.line}`,
-              }}>
-                <div style={{
-                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
-                  textTransform: 'uppercase', color: t.muted, marginBottom: 8,
-                }}>{s}</div>
-                <CryMeter value={62} t={t} style={s} />
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ height: 28 }} />
-        <Eyebrow num="04" label="voice" t={t} style={{ marginBottom: 12 }} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          {VOICES.map(v => {
-            const active = tweaks.voice === v;
-            return (
-              <button key={v} onClick={() => setTweaks(p => ({ ...p, voice: v }))} style={{
-                flex: 1, padding: '10px 0', cursor: 'pointer',
-                background: active ? t.cream : 'transparent',
-                color: active ? t.bg : t.creamDim,
-                border: `1px solid ${active ? t.cream : t.line}`,
-                fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
-                textTransform: 'uppercase',
-              }}>{v}</button>
-            );
-          })}
-        </div>
-
-        <div style={{ height: 28 }} />
-        <Eyebrow num="05" label="dimensions" t={t} style={{ marginBottom: 12 }} />
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {DEFAULT_DIMS.map(d => {
-            const active = tweaks.dims.includes(d.key as DimKey);
-            return (
-              <button key={d.key} onClick={() => toggleDim(d.key as DimKey)} style={{
-                padding: '6px 12px', cursor: 'pointer',
-                background: active ? t.cream : 'transparent',
-                color: active ? t.bg : t.creamDim,
-                border: `1px solid ${active ? t.cream : t.line}`,
-                fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
-                textTransform: 'uppercase',
-              }}>{d.label}</button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AuthStrip({
-  auth, t,
-}: {
-  auth: ReturnType<typeof useAuth>;
-  t: ReturnType<typeof useTweaks>['theme'];
-}) {
-  const label =
-    auth.status === 'disabled' ? 'local · not synced' :
-    auth.status === 'init' ? 'connecting…' :
-    auth.status === 'anon' ? 'anon · synced on this device' :
-    auth.status === 'user' ? (auth.email || 'signed in') :
-    auth.status === 'error' ? `error · ${auth.error ?? 'unknown'}` : '—';
-
-  const dot =
-    auth.status === 'user' ? t.signal :
-    auth.status === 'anon' ? t.accent :
-    auth.status === 'error' ? t.danger : t.muted;
-
-  const [expanded, setExpanded] = React.useState(false);
-  const [email, setEmail] = React.useState('');
-  const [busy, setBusy] = React.useState(false);
-  const [sent, setSent] = React.useState<'upgrade' | 'signin' | null>(null);
-  const [msg, setMsg] = React.useState<string | null>(null);
-  const [confirmOut, setConfirmOut] = React.useState(false);
-
-  const submit = async () => {
-    setBusy(true);
-    setMsg(null);
-    const res = await startEmailAuth(email);
-    setBusy(false);
-    if (!res.ok) { setMsg(res.error ?? 'failed'); return; }
-    setSent(res.intent);
-  };
-
-  const doSignOut = async () => {
-    setBusy(true);
-    const err = await signOut();
-    setBusy(false);
-    if (err) setMsg(err);
-  };
-
-  return (
-    <div style={{
-      border: `1px solid ${t.line}`, background: t.surface,
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '12px 14px',
-      }}>
-        <div style={{
-          width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0,
-        }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
-            textTransform: 'uppercase', color: t.cream,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{label}</div>
-          {auth.userId && (
-            <div style={{
-              fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.2,
-              color: t.muted, marginTop: 2,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>id · {auth.userId}</div>
-          )}
-        </div>
-        {(auth.status === 'anon' || auth.status === 'user') && !expanded && (
-          <button onClick={() => { setExpanded(true); setSent(null); setMsg(null); setConfirmOut(false); }} style={{
-            background: 'transparent', border: `1px solid ${t.line}`, cursor: 'pointer',
-            padding: '6px 10px', color: t.creamDim,
-            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
-            textTransform: 'uppercase',
-          }}>{auth.status === 'anon' ? 'connect email' : 'account'}</button>
+        <Eyebrow num="§" label="your public log" t={t} style={{ marginBottom: 16 }} />
+        {feed.state === 'loading' && (
+          <Center t={t} text="loading entries…" tight />
         )}
-      </div>
-
-      {expanded && auth.status === 'anon' && (
-        <div style={{
-          padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 8,
-        }}>
-          {sent === 'upgrade' && (
-            <EmailSentNote t={t} email={email} note="check your inbox · click the link to anchor this device to that email. your log stays." />
-          )}
-          {sent === 'signin' && (
-            <EmailSentNote t={t} email={email} note="check your inbox · that email already has an account. clicking the link signs you into it and replaces this anonymous session." />
-          )}
-          {!sent && (
-            <>
-              <div style={{
-                fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
-                color: t.creamDim, lineHeight: 1.4,
-              }}>attach an email so you don&apos;t lose your log if this browser gets wiped.</div>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@somewhere.com"
-                autoCapitalize="off"
-                autoCorrect="off"
-                style={{
-                  width: '100%', padding: 10,
-                  background: t.bg, color: t.cream,
-                  border: `1px solid ${t.line}`, outline: 'none',
-                  fontFamily: LumiereType.mono, fontSize: 12, letterSpacing: 0.5,
-                }}
+        {feed.state === 'error' && (
+          <Center t={t} text={`error · ${feed.error}`} tight />
+        )}
+        {feed.state === 'loaded' && feed.entries.length === 0 && (
+          <Center
+            t={t}
+            tight
+            text='no public entries yet. toggle entries to "followers" when logging.'
+          />
+        )}
+        {feed.entries.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {feed.entries.map(e => (
+              <PublicEntryCard
+                key={e.id}
+                entry={e}
+                film={films[e.filmId] || null}
+                reaction={reactions[e.id] ?? { count: 0, mine: false }}
+                t={t}
+                cryStyle={tweaks.cryStyle}
               />
-              {msg && <div style={{
-                fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
-                textTransform: 'uppercase', color: t.danger,
-              }}>{msg}</div>}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setExpanded(false)} style={{
-                  flex: 1, padding: '10px 0', background: 'transparent',
-                  border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
-                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-                  textTransform: 'uppercase',
-                }}>cancel</button>
-                <button onClick={submit} disabled={busy || !email.trim()} style={{
-                  flex: 2, padding: '10px 0', background: t.cream, color: t.bg,
-                  border: 'none', cursor: busy ? 'default' : 'pointer',
-                  opacity: busy || !email.trim() ? 0.6 : 1,
-                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-                  textTransform: 'uppercase',
-                }}>{busy ? 'sending…' : 'send magic link'}</button>
-              </div>
-            </>
-          )}
-          {sent && (
-            <button onClick={() => setExpanded(false)} style={{
-              padding: '10px 0', background: 'transparent',
-              border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
-              fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-              textTransform: 'uppercase',
-            }}>ok</button>
-          )}
-        </div>
-      )}
-
-      {expanded && auth.status === 'user' && (
-        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {msg && <div style={{
-            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
-            textTransform: 'uppercase', color: t.danger,
-          }}>{msg}</div>}
-          {!confirmOut ? (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setExpanded(false)} style={{
-                flex: 1, padding: '10px 0', background: 'transparent',
-                border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
-                fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-                textTransform: 'uppercase',
-              }}>close</button>
-              <button onClick={() => setConfirmOut(true)} style={{
-                flex: 2, padding: '10px 0', background: 'transparent',
-                border: `1px solid ${t.danger}`, color: t.danger, cursor: 'pointer',
-                fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-                textTransform: 'uppercase',
-              }}>sign out</button>
-            </div>
-          ) : (
-            <>
-              <div style={{
-                fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
-                color: t.creamDim, lineHeight: 1.4,
-              }}>sign out and go back to anonymous? your remote log stays safe · you can sign back in anytime with the same email.</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setConfirmOut(false)} style={{
-                  flex: 1, padding: '10px 0', background: 'transparent',
-                  border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
-                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-                  textTransform: 'uppercase',
-                }}>cancel</button>
-                <button onClick={doSignOut} disabled={busy} style={{
-                  flex: 2, padding: '10px 0', background: t.danger, color: t.bg,
-                  border: 'none', cursor: busy ? 'default' : 'pointer',
-                  opacity: busy ? 0.6 : 1,
-                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-                  textTransform: 'uppercase',
-                }}>{busy ? 'signing out…' : 'confirm sign out'}</button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function HandleBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
-  const auth = useAuth();
-  const { profile, state } = useMyProfile();
-  const [editing, setEditing] = React.useState(false);
-
-  if (auth.status !== 'anon' && auth.status !== 'user') return null;
-
-  const avatar = profile
-    ? avatarFor(profile.id, profile.handle)
-    : auth.userId ? avatarFor(auth.userId) : { initials: '??', tint: t.muted };
-
-  if (editing) {
-    const formKey = profile ? `${profile.id}:${profile.handle}:${profile.name ?? ''}:${profile.bio ?? ''}` : 'new';
-    return (
-      <HandleEditForm
-        key={formKey}
-        t={t}
-        profile={profile}
-        onCancel={() => setEditing(false)}
-        onSaved={() => setEditing(false)}
-      />
-    );
-  }
-
-  if (profile) {
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '12px 14px', border: `1px solid ${t.line}`, background: t.surface,
-      }}>
-        <Avatar friend={avatar} size={40} t={t} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 1.6,
-            color: t.cream,
-          }}>@{profile.handle}</div>
-          {profile.name && <div style={{
-            fontFamily: LumiereType.body, fontSize: 14, fontStyle: 'italic',
-            color: t.creamDim, marginTop: 2,
-          }}>{profile.name}</div>}
-        </div>
-        <button onClick={() => setEditing(true)} style={{
-          background: 'transparent', border: `1px solid ${t.line}`,
-          padding: '8px 12px', cursor: 'pointer', color: t.creamDim,
-          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
-          textTransform: 'uppercase',
-        }}>edit</button>
-      </div>
-    );
-  }
-
-  if (state !== 'loaded' && state !== 'missing') {
-    return (
-      <div style={{
-        padding: '12px 14px', border: `1px solid ${t.line}`, background: t.surface,
-        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14, color: t.creamDim,
-      }}>loading profile…</div>
-    );
-  }
-
-  return (
-    <button onClick={() => setEditing(true)} style={{
-      display: 'block', width: '100%', padding: '14px 0',
-      background: 'transparent', color: t.cream, cursor: 'pointer',
-      border: `1px dashed ${t.line}`,
-      fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
-      textTransform: 'uppercase',
-    }}>+ claim a handle</button>
-  );
-}
-
-function HandleEditForm({
-  t, profile, onCancel, onSaved,
-}: {
-  t: ReturnType<typeof useTweaks>['theme'];
-  profile: Profile | null;
-  onCancel: () => void;
-  onSaved: () => void;
-}) {
-  const [handle, setHandle] = React.useState(profile?.handle ?? '');
-  const [name, setName] = React.useState(profile?.name ?? '');
-  const [bio, setBio] = React.useState(profile?.bio ?? '');
-  const [saving, setSaving] = React.useState(false);
-  const [msg, setMsg] = React.useState<string | null>(null);
-
-  const save = async () => {
-    setSaving(true);
-    setMsg(null);
-    const err = await saveMyProfile({ handle, name, bio });
-    setSaving(false);
-    if (err) { setMsg(err); return; }
-    onSaved();
-  };
-
-  return (
-    <div style={{
-      border: `1px solid ${t.line}`, padding: 14, background: t.surface,
-      display: 'flex', flexDirection: 'column', gap: 10,
-    }}>
-      <Field label="handle" t={t}>
-        <input
-          value={handle}
-          onChange={e => setHandle(e.target.value)}
-          placeholder="yourname"
-          autoCapitalize="off"
-          autoCorrect="off"
-          style={inputStyle(t)}
-        />
-      </Field>
-      <Field label="name" t={t}>
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="optional display name"
-          style={inputStyle(t)}
-        />
-      </Field>
-      <Field label="bio" t={t}>
-        <textarea
-          value={bio}
-          onChange={e => setBio(e.target.value)}
-          placeholder="one line about you"
-          rows={2}
-          style={{ ...inputStyle(t), resize: 'vertical' }}
-        />
-      </Field>
-      {msg && <div style={{
-        fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
-        textTransform: 'uppercase', color: t.danger,
-      }}>{msg}</div>}
-      <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
-        {profile && (
-          <button onClick={onCancel} style={{
-            flex: 1, padding: '10px 0', background: 'transparent',
-            border: `1px solid ${t.line}`, color: t.creamDim, cursor: 'pointer',
-            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-            textTransform: 'uppercase',
-          }}>cancel</button>
+            ))}
+          </div>
         )}
-        <button onClick={save} disabled={saving || !handle.trim()} style={{
-          flex: 2, padding: '10px 0', background: t.cream, color: t.bg,
-          border: 'none', cursor: saving ? 'default' : 'pointer',
-          opacity: saving || !handle.trim() ? 0.6 : 1,
-          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-          textTransform: 'uppercase',
-        }}>{saving ? 'saving…' : profile ? 'save' : 'claim'}</button>
       </div>
     </div>
   );
 }
 
-function Field({ label, t, children }: {
-  label: string; t: ReturnType<typeof useTweaks>['theme']; children: React.ReactNode;
-}) {
+function SettingsLink({ t }: { t: Theme }) {
   return (
-    <div>
-      <div style={{
-        fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
-        textTransform: 'uppercase', color: t.muted, marginBottom: 4,
-      }}>{label}</div>
-      {children}
-    </div>
-  );
-}
-
-function inputStyle(t: ReturnType<typeof useTweaks>['theme']): React.CSSProperties {
-  return {
-    width: '100%', padding: 10,
-    background: t.bg, color: t.cream,
-    border: `1px solid ${t.line}`, outline: 'none',
-    fontFamily: LumiereType.mono, fontSize: 12, letterSpacing: 0.5,
-  };
-}
-
-function FollowingStat({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
-  const { ids, state } = useFollowing();
-  const value = state === 'loaded' ? ids.length.toString().padStart(3, '0') : '···';
-  return (
-    <Link href="/friends" style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-      padding: '10px 0', borderBottom: `1px solid ${t.lineSoft}`,
-      textDecoration: 'none', color: 'inherit',
+    <Link href="/profile/settings" aria-label="settings" style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 36, height: 36, border: `1px solid ${t.line}`,
+      color: t.creamDim, textDecoration: 'none',
     }}>
-      <div style={{
-        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
-        textTransform: 'uppercase', color: t.muted,
-      }}>following →</div>
-      <div style={{
-        fontFamily: LumiereType.display, fontSize: 28, lineHeight: 1,
-        color: t.cream, letterSpacing: -0.6,
-      }}>{value}</div>
+      <GearIcon c={t.creamDim} />
     </Link>
   );
 }
 
-function EmailSentNote({
-  t, email, note,
-}: {
-  t: ReturnType<typeof useTweaks>['theme'];
-  email: string;
-  note: string;
-}) {
+function GearIcon({ c }: { c: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <circle cx="8" cy="8" r="2.2" stroke={c} fill="none" strokeWidth="1" />
+      <g stroke={c} strokeWidth="1" strokeLinecap="square">
+        <line x1="8" y1="1.5" x2="8" y2="3.5" />
+        <line x1="8" y1="12.5" x2="8" y2="14.5" />
+        <line x1="1.5" y1="8" x2="3.5" y2="8" />
+        <line x1="12.5" y1="8" x2="14.5" y2="8" />
+        <line x1="3.4" y1="3.4" x2="4.8" y2="4.8" />
+        <line x1="11.2" y1="11.2" x2="12.6" y2="12.6" />
+        <line x1="12.6" y1="3.4" x2="11.2" y2="4.8" />
+        <line x1="4.8" y1="11.2" x2="3.4" y2="12.6" />
+      </g>
+    </svg>
+  );
+}
+
+function EmptyClaim({ t, text }: { t: Theme; text: string }) {
   return (
     <div style={{
-      padding: '10px 12px', background: t.bg, border: `1px solid ${t.line}`,
+      padding: '40px 20px', textAlign: 'center',
+      border: `1px dashed ${t.line}`,
     }}>
       <div style={{
-        fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
-        textTransform: 'uppercase', color: t.signal, marginBottom: 6,
-      }}>✓ sent to {email}</div>
-      <div style={{
-        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
-        color: t.creamDim, lineHeight: 1.4,
-      }}>{note}</div>
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 16,
+        color: t.creamDim, lineHeight: 1.45, marginBottom: 16,
+      }}>{text}</div>
+      <Link href="/profile/settings" style={{
+        display: 'inline-block', padding: '10px 18px',
+        background: t.cream, color: t.bg, textDecoration: 'none',
+        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+        textTransform: 'uppercase',
+      }}>open workshop →</Link>
     </div>
   );
 }
 
-function Stat({ t, label, value }: { t: ReturnType<typeof useTweaks>['theme']; label: string; value: string }) {
+function PublicEntryCard({
+  entry, film, reaction, t, cryStyle,
+}: {
+  entry: LogEntry;
+  film: Film | null;
+  reaction: { count: number; mine: boolean };
+  t: Theme;
+  cryStyle: ReturnType<typeof useTweaks>['tweaks']['cryStyle'];
+}) {
+  const date = new Date(entry.createdAt).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  }).toLowerCase();
+  return (
+    <article style={{ display: 'flex', gap: 14 }}>
+      {film
+        ? <Link href={`/films/${encodeURIComponent(film.id)}`}><Poster film={film} size="sm" t={t} /></Link>
+        : <div style={{
+            width: 72, height: 104, background: t.surfaceHi, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: LumiereType.mono, fontSize: 10, color: t.muted,
+          }}>?</div>
+      }
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: LumiereType.display, fontSize: 20, lineHeight: 1,
+          color: t.cream, letterSpacing: -0.4,
+        }}>{film?.title || 'unknown film'}</div>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.6,
+          textTransform: 'uppercase', color: t.muted, marginTop: 6, marginBottom: 10,
+        }}>{date} · cry {entry.cry}</div>
+        <CryMeter value={entry.cry} t={t} style={cryStyle} />
+        {entry.note && (
+          <div style={{
+            fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+            color: t.creamDim, lineHeight: 1.4, marginTop: 10,
+          }}>{entry.note}</div>
+        )}
+        <div style={{ marginTop: 10 }}>
+          <ReactionButton
+            count={reaction.count}
+            mine={reaction.mine}
+            t={t}
+            onToggle={() => void toggleReaction(entry.id)}
+          />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function Center({
+  t, text, tight,
+}: {
+  t: Theme;
+  text: string;
+  tight?: boolean;
+}) {
   return (
     <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-      padding: '10px 0', borderBottom: `1px solid ${t.lineSoft}`,
-    }}>
-      <div style={{
-        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
-        textTransform: 'uppercase', color: t.muted,
-      }}>{label}</div>
-      <div style={{
-        fontFamily: LumiereType.display, fontSize: 28, lineHeight: 1,
-        color: t.cream, letterSpacing: -0.6,
-      }}>{value}</div>
-    </div>
+      padding: tight ? '24px 0' : '80px 20px', textAlign: 'center',
+      fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: tight ? 15 : 18,
+      color: t.creamDim,
+    }}>{text}</div>
   );
 }

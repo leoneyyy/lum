@@ -227,7 +227,7 @@ function CircleEntryCard({
     month: 'short', day: 'numeric',
   }).toLowerCase();
   const avatar = author
-    ? avatarFor(author.id, author.handle)
+    ? avatarFor(author.id, author.handle, author.avatarUrl)
     : avatarFor(entry.userId);
 
   return (

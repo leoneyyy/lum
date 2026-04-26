@@ -61,11 +61,23 @@ export function Eyebrow({ num, label, t, style }: EyebrowProps) {
 }
 
 interface AvatarProps {
-  friend: { initials: string; tint: string };
+  friend: { initials: string; tint: string; avatarUrl?: string | null };
   size?: number;
   t: Theme;
 }
 export function Avatar({ friend, size = 32, t }: AvatarProps) {
+  if (friend.avatarUrl) {
+    return (
+      <img
+        src={friend.avatarUrl}
+        alt=""
+        style={{
+          width: size, height: size, borderRadius: '50%',
+          objectFit: 'cover', flexShrink: 0, display: 'block',
+        }}
+      />
+    );
+  }
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
@@ -79,13 +91,17 @@ export function Avatar({ friend, size = 32, t }: AvatarProps) {
 }
 
 const AVATAR_TINTS = ['#7a6bc2', '#c94a3f', '#d4f542', '#e89488', '#4a3b7a', '#d4c5f9', '#b8a078', '#7ac29d'];
-export function avatarFor(seed: string, fallbackLabel?: string): { initials: string; tint: string } {
+export function avatarFor(
+  seed: string,
+  fallbackLabel?: string,
+  avatarUrl?: string | null,
+): { initials: string; tint: string; avatarUrl?: string | null } {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0;
   const tint = AVATAR_TINTS[Math.abs(hash) % AVATAR_TINTS.length];
   const label = (fallbackLabel ?? seed).replace(/[^a-zA-Z0-9]/g, '');
   const initials = (label.slice(0, 2) || '??').toUpperCase();
-  return { initials, tint };
+  return { initials, tint, avatarUrl };
 }
 
 interface ReactionButtonProps {

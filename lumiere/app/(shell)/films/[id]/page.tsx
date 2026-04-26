@@ -5,7 +5,8 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType, DEFAULT_DIMS, LumiereVoice } from '@/app/components/lib/tokens';
 import type { DimKey } from '@/app/components/lib/tokens';
-import { getFilm } from '@/app/components/lib/api';
+import { getFilm, getSeriesEpisodes } from '@/app/components/lib/api';
+import type { SeasonSummary, EpisodeSummary } from '@/app/components/lib/tmdb';
 import type { Film, LogEntry, Profile, RatingMap, Visibility } from '@/app/components/lib/types';
 import { Poster } from '@/app/components/ui/Poster';
 import { CryMeter } from '@/app/components/ui/CryMeter';
@@ -335,6 +336,10 @@ export default function FilmDetailPage() {
         </div>
       )}
 
+      {film.kind === 'series' && film.season == null && (
+        <EpisodesSection seriesId={id} t={t} />
+      )}
+
       <CircleForFilm filmId={id} t={t} />
 
       {picker && (
@@ -362,6 +367,170 @@ function MetaRow({ t, items }: { t: ReturnType<typeof useTweaks>['theme']; items
       fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
       textTransform: 'uppercase', color: t.muted,
     }}>{items.join(' · ')}</div>
+  );
+}
+
+function EpisodesSection({
+  seriesId, t,
+}: {
+  seriesId: string;
+  t: ReturnType<typeof useTweaks>['theme'];
+}) {
+  type Loaded = {
+    seasons: SeasonSummary[];
+    selected: number | null;
+    episodes: Record<number, EpisodeSummary[]>;
+  };
+  const [data, setData] = React.useState<Loaded | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loadingEpisodes, setLoadingEpisodes] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancel = false;
+    void (async () => {
+      try {
+        const seasonsRes = await getSeriesEpisodes(seriesId);
+        if (cancel) return;
+        const seasons = seasonsRes.seasons.filter(s => s.episodeCount > 0);
+        const first = seasons.find(s => s.number > 0) ?? seasons[0] ?? null;
+        if (!first) {
+          setData({ seasons, selected: null, episodes: {} });
+          return;
+        }
+        const epRes = await getSeriesEpisodes(seriesId, first.number);
+        if (cancel) return;
+        setData({
+          seasons,
+          selected: first.number,
+          episodes: epRes.episodes ? { [first.number]: epRes.episodes } : {},
+        });
+      } catch (e) {
+        if (!cancel) setError(e instanceof Error ? e.message : 'failed');
+      }
+    })();
+    return () => { cancel = true; };
+  }, [seriesId]);
+
+  const selectSeason = (n: number) => {
+    if (!data) return;
+    if (data.episodes[n]) {
+      setData({ ...data, selected: n });
+      return;
+    }
+    setData({ ...data, selected: n });
+    setLoadingEpisodes(true);
+    void getSeriesEpisodes(seriesId, n)
+      .then(res => {
+        if (!res.episodes) return;
+        setData(prev => prev && {
+          ...prev,
+          episodes: { ...prev.episodes, [n]: res.episodes! },
+        });
+      })
+      .catch(e => setError(e instanceof Error ? e.message : 'failed'))
+      .finally(() => setLoadingEpisodes(false));
+  };
+
+  if (error) return (
+    <div style={{ padding: '20px', borderTop: `1px solid ${t.line}` }}>
+      <Eyebrow num="◯" label="episodes" t={t} style={{ margin: '12px 0 14px' }} />
+      <div style={{
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+        color: t.danger,
+      }}>error · {error}</div>
+    </div>
+  );
+
+  if (!data) return (
+    <div style={{ padding: '20px', borderTop: `1px solid ${t.line}` }}>
+      <Eyebrow num="◯" label="episodes" t={t} style={{ margin: '12px 0 14px' }} />
+      <div style={{
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+        color: t.creamDim,
+      }}>loading episodes…</div>
+    </div>
+  );
+
+  if (data.seasons.length === 0) return null;
+
+  const eps = data.selected != null ? data.episodes[data.selected] : null;
+
+  return (
+    <div style={{ padding: '20px', borderTop: `1px solid ${t.line}` }}>
+      <Eyebrow
+        num={String(data.seasons.length).padStart(2, '0')}
+        label={data.seasons.length === 1 ? 'season' : 'seasons'}
+        t={t}
+        style={{ margin: '12px 0 14px' }}
+      />
+      <div style={{
+        display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8,
+        marginBottom: 14, borderBottom: `1px solid ${t.lineSoft}`,
+      }}>
+        {data.seasons.map(s => {
+          const active = data.selected === s.number;
+          const label = s.number === 0 ? 'specials' : `s${String(s.number).padStart(2, '0')}`;
+          return (
+            <button key={s.number} onClick={() => selectSeason(s.number)} style={{
+              padding: '8px 12px', cursor: 'pointer', flexShrink: 0,
+              background: active ? t.cream : 'transparent',
+              color: active ? t.bg : t.creamDim,
+              border: `1px solid ${active ? t.cream : t.line}`,
+              fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+              textTransform: 'uppercase',
+            }}>
+              {label}
+              <span style={{ opacity: 0.6, marginLeft: 6 }}>{s.episodeCount}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {!eps ? (
+        <div style={{
+          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+          color: t.creamDim,
+        }}>{loadingEpisodes ? 'loading episodes…' : 'pick a season.'}</div>
+      ) : eps.length === 0 ? (
+        <div style={{
+          fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+          color: t.creamDim,
+        }}>no episodes listed.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {eps.map(ep => (
+            <Link
+              key={ep.number}
+              href={`/films/${encodeURIComponent(`${seriesId}_s${data.selected}_e${ep.number}`)}`}
+              style={{
+                display: 'flex', gap: 12, alignItems: 'flex-start',
+                padding: '8px 0', borderBottom: `1px solid ${t.lineSoft}`,
+                textDecoration: 'none', color: 'inherit',
+              }}
+            >
+              <div style={{
+                width: 60, height: 34, flexShrink: 0,
+                background: ep.stillUrl ? `url(${ep.stillUrl}) center/cover` : t.surfaceHi,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+                  textTransform: 'uppercase', color: t.muted, marginBottom: 2,
+                }}>
+                  e{String(ep.number).padStart(2, '0')}
+                  {ep.runtime ? ` · ${ep.runtime}m` : ''}
+                  {ep.airDate ? ` · ${ep.airDate.slice(0, 4)}` : ''}
+                </div>
+                <div style={{
+                  fontFamily: LumiereType.display, fontSize: 16, lineHeight: 1.1,
+                  color: t.cream, letterSpacing: -0.3,
+                }}>{ep.name}</div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -433,7 +602,7 @@ function CircleEntry({ entry, author, reaction, t }: {
     month: 'short', day: 'numeric',
   }).toLowerCase();
   const avatar = author
-    ? avatarFor(author.id, author.handle)
+    ? avatarFor(author.id, author.handle, author.avatarUrl)
     : avatarFor(entry.userId);
 
   const header = (

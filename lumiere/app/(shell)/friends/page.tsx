@@ -162,7 +162,7 @@ function FollowRow({
   const isFollowing = ids.includes(id);
   const [busy, setBusy] = React.useState(false);
   const avatar = profile
-    ? avatarFor(profile.id, profile.handle)
+    ? avatarFor(profile.id, profile.handle, profile.avatarUrl)
     : avatarFor(id);
 
   const toggle = async (e: React.MouseEvent) => {

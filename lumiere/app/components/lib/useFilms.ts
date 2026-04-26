@@ -3,11 +3,11 @@ import React from 'react';
 import type { Film, LogEntry } from './types';
 import { getFilm } from './api';
 
-export function useFilmsForEntries(entries: LogEntry[]): Record<string, Film> {
+export function useFilmsByIds(rawIds: readonly string[]): Record<string, Film> {
   const [films, setFilms] = React.useState<Record<string, Film>>({});
   const ids = React.useMemo(
-    () => Array.from(new Set(entries.map(e => e.filmId))).sort().join('|'),
-    [entries],
+    () => Array.from(new Set(rawIds)).sort().join('|'),
+    [rawIds],
   );
 
   React.useEffect(() => {
@@ -27,4 +27,8 @@ export function useFilmsForEntries(entries: LogEntry[]): Record<string, Film> {
   }, [ids]);
 
   return films;
+}
+
+export function useFilmsForEntries(entries: LogEntry[]): Record<string, Film> {
+  return useFilmsByIds(entries.map(e => e.filmId));
 }

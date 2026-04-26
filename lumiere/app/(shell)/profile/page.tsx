@@ -7,11 +7,12 @@ import type { Theme } from '@/app/components/lib/tokens';
 import { useAuth } from '@/app/components/AuthProvider';
 import { useMyProfile } from '@/app/components/lib/profileStore';
 import { usePublicEntriesByUser } from '@/app/components/lib/feedStore';
-import { useFilmsForEntries } from '@/app/components/lib/useFilms';
+import { useFilmsForEntries, useFilmsByIds } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
 import type { Film, LogEntry } from '@/app/components/lib/types';
 import { Avatar, avatarFor, Eyebrow, ReactionButton } from '@/app/components/ui/Primitives';
+import { TopPicksGrid } from '@/app/components/ui/TopPicks';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import { Poster } from '@/app/components/ui/Poster';
 
@@ -24,16 +25,24 @@ export default function ProfilePage() {
   const feed = usePublicEntriesByUser(userId, 40);
   const reactions = useReactions(feed.entries.map(e => e.id));
   const rawFilms = useFilmsForEntries(feed.entries);
+  const pickIds = React.useMemo(
+    () => [...(profile?.topFilms ?? []), ...(profile?.topSeries ?? [])],
+    [profile?.topFilms, profile?.topSeries],
+  );
+  const pickFilms = useFilmsByIds(pickIds);
   const overrides = useFilmOverrides();
   const films = React.useMemo<Record<string, Film>>(() => {
     const out: Record<string, Film> = {};
+    for (const [id, f] of Object.entries(pickFilms)) {
+      out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
+    }
     for (const [id, f] of Object.entries(rawFilms)) {
       out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
     }
     return out;
-  }, [rawFilms, overrides]);
+  }, [rawFilms, overrides, pickFilms]);
 
-  const showHeaderRow = (
+  const headerRow = (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       marginBottom: 16,
@@ -49,7 +58,7 @@ export default function ProfilePage() {
   if (auth.status === 'init') {
     return (
       <div style={{ padding: '20px' }}>
-        {showHeaderRow}
+        {headerRow}
         <Center t={t} text="connecting…" />
       </div>
     );
@@ -58,7 +67,7 @@ export default function ProfilePage() {
   if (auth.status === 'disabled' || auth.status === 'error') {
     return (
       <div style={{ padding: '20px' }}>
-        {showHeaderRow}
+        {headerRow}
         <EmptyClaim t={t} text="set up an identity in the workshop." />
       </div>
     );
@@ -68,34 +77,54 @@ export default function ProfilePage() {
     if (state !== 'loaded' && state !== 'missing') {
       return (
         <div style={{ padding: '20px' }}>
-          {showHeaderRow}
+          {headerRow}
           <Center t={t} text="loading profile…" />
         </div>
       );
     }
     return (
       <div style={{ padding: '20px' }}>
-        {showHeaderRow}
+        {headerRow}
         <EmptyClaim t={t} text="you haven't claimed a handle yet." />
       </div>
     );
   }
 
-  const avatar = avatarFor(profile.id, profile.handle);
+  const avatar = avatarFor(profile.id, profile.handle, profile.avatarUrl);
+
+  const heroBackdrop = (() => {
+    for (const id of [...profile.topFilms, ...profile.topSeries]) {
+      const f = films[id];
+      if (f?.backdropUrl) return f.backdropUrl;
+    }
+    return null;
+  })();
 
   return (
     <div>
-      <div style={{ padding: '20px 20px 24px', borderBottom: `1px solid ${t.line}` }}>
+      {heroBackdrop && (
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          marginBottom: 16,
+          position: 'relative', height: 220, overflow: 'hidden',
+          borderBottom: `1px solid ${t.line}`,
         }}>
+          <img src={heroBackdrop} alt="" style={{
+            width: '100%', height: '100%', objectFit: 'cover',
+            filter: 'brightness(0.5) saturate(0.85)',
+          }} />
           <div style={{
-            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-            textTransform: 'uppercase', color: t.muted,
-          }}>§ self</div>
-          <SettingsLink t={t} />
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(180deg, transparent 30%, ${t.bg})`,
+          }} />
+          <div style={{
+            position: 'absolute', top: 14, right: 18,
+          }}>
+            <SettingsLink t={t} dark />
+          </div>
         </div>
+      )}
+
+      <div style={{ padding: '20px 20px 24px', borderBottom: `1px solid ${t.line}` }}>
+        {!heroBackdrop && headerRow}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <Avatar friend={avatar} size={64} t={t} />
@@ -127,6 +156,20 @@ export default function ProfilePage() {
           textTransform: 'uppercase', color: t.muted, textAlign: 'center',
         }}>this is your public page</div>
       </div>
+
+      {(profile.topFilms.length > 0 || profile.topSeries.length > 0) && (
+        <div style={{ padding: '20px', borderBottom: `1px solid ${t.line}` }}>
+          <Eyebrow num="◆" label="canon" t={t} style={{ marginBottom: 14 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {profile.topFilms.length > 0 && (
+              <TopPicksGrid picks={profile.topFilms} films={films} t={t} label="top films" />
+            )}
+            {profile.topSeries.length > 0 && (
+              <TopPicksGrid picks={profile.topSeries} films={films} t={t} label="top series" />
+            )}
+          </div>
+        </div>
+      )}
 
       <div style={{ padding: '20px' }}>
         <Eyebrow num="§" label="your public log" t={t} style={{ marginBottom: 16 }} />
@@ -162,14 +205,16 @@ export default function ProfilePage() {
   );
 }
 
-function SettingsLink({ t }: { t: Theme }) {
+function SettingsLink({ t, dark }: { t: Theme; dark?: boolean }) {
+  const color = dark ? t.cream : t.creamDim;
+  const bg = dark ? 'rgba(0,0,0,0.45)' : 'transparent';
   return (
     <Link href="/profile/settings" aria-label="settings" style={{
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       width: 36, height: 36, border: `1px solid ${t.line}`,
-      color: t.creamDim, textDecoration: 'none',
+      color, background: bg, textDecoration: 'none',
     }}>
-      <GearIcon c={t.creamDim} />
+      <GearIcon c={color} />
     </Link>
   );
 }

@@ -6,6 +6,7 @@ import { setProfileUser } from '@/app/components/lib/profileStore';
 import { setFollowUser } from '@/app/components/lib/followStore';
 import { setReactionUser } from '@/app/components/lib/reactionStore';
 import { setFeedUser } from '@/app/components/lib/feedStore';
+import { setOverridesUser } from '@/app/components/lib/filmOverrides';
 
 export type AuthStatus = 'init' | 'anon' | 'user' | 'disabled' | 'error';
 
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFollowUser(null);
       setReactionUser(null);
       setFeedUser(null);
+      setOverridesUser(null);
       return;
     }
 
@@ -54,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFollowUser(userId);
       setReactionUser(userId);
       setFeedUser(userId);
+      setOverridesUser(userId);
       setState({
         status: error ? 'error' : userId ? (isAnon ? 'anon' : 'user') : 'init',
         userId,

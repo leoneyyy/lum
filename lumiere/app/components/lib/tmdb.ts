@@ -115,6 +115,56 @@ export async function getSeries(tvId: number): Promise<Film> {
   return film;
 }
 
+export interface SeasonSummary {
+  number: number;
+  name: string;
+  episodeCount: number;
+  airDate: string | null;
+  posterUrl: string | null;
+  overview: string;
+}
+
+export interface EpisodeSummary {
+  number: number;
+  name: string;
+  runtime: number | null;
+  airDate: string | null;
+  stillUrl: string | null;
+  overview: string;
+}
+
+export async function getSeasons(tvId: number): Promise<SeasonSummary[]> {
+  const url = `${TMDB_BASE}/tv/${tvId}`;
+  const r = await fetch(url, { headers: authHeaders(), next: { revalidate: 3600 } });
+  if (!r.ok) throw new Error(`TMDB seasons ${tvId} failed: ${r.status}`);
+  const j = await r.json();
+  return ((j.seasons || []) as Array<Record<string, unknown>>)
+    .filter(s => Number(s.season_number) >= 0)
+    .map((s): SeasonSummary => ({
+      number: Number(s.season_number),
+      name: String(s.name ?? `Season ${s.season_number}`),
+      episodeCount: Number(s.episode_count ?? 0),
+      airDate: (s.air_date as string | null) ?? null,
+      posterUrl: posterUrl(s.poster_path as string | null | undefined),
+      overview: String(s.overview ?? ''),
+    }));
+}
+
+export async function getSeasonEpisodes(tvId: number, season: number): Promise<EpisodeSummary[]> {
+  const url = `${TMDB_BASE}/tv/${tvId}/season/${season}`;
+  const r = await fetch(url, { headers: authHeaders(), next: { revalidate: 3600 } });
+  if (!r.ok) throw new Error(`TMDB season ${tvId}/${season} failed: ${r.status}`);
+  const j = await r.json();
+  return ((j.episodes || []) as Array<Record<string, unknown>>).map((e): EpisodeSummary => ({
+    number: Number(e.episode_number),
+    name: String(e.name ?? `Episode ${e.episode_number}`),
+    runtime: typeof e.runtime === 'number' ? e.runtime : null,
+    airDate: (e.air_date as string | null) ?? null,
+    stillUrl: posterUrl(e.still_path as string | null | undefined, 'w500'),
+    overview: String(e.overview ?? ''),
+  }));
+}
+
 export async function getEpisode(tvId: number, season: number, episode: number): Promise<Film> {
   const tvUrl = `${TMDB_BASE}/tv/${tvId}`;
   const epUrl = `${TMDB_BASE}/tv/${tvId}/season/${season}/episode/${episode}`;

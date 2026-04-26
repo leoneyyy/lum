@@ -46,7 +46,10 @@ export interface Profile {
   handle: string;
   name?: string;
   bio?: string;
+  avatarUrl?: string | null;
   createdAt: string;
+  topFilms: string[];
+  topSeries: string[];
 }
 
 export interface Friend {

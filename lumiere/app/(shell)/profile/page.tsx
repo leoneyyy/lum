@@ -5,7 +5,7 @@ import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType } from '@/app/components/lib/tokens';
 import type { Theme } from '@/app/components/lib/tokens';
 import { useAuth } from '@/app/components/AuthProvider';
-import { useMyProfile } from '@/app/components/lib/profileStore';
+import { useMyProfile, saveMyProfile } from '@/app/components/lib/profileStore';
 import { usePublicEntriesByUser } from '@/app/components/lib/feedStore';
 import { useFilmsForEntries, useFilmsByIds } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
@@ -64,11 +64,20 @@ export default function ProfilePage() {
     );
   }
 
-  if (auth.status === 'disabled' || auth.status === 'error') {
+  if (auth.status === 'disabled') {
     return (
       <div style={{ padding: '20px' }}>
         {headerRow}
-        <EmptyClaim t={t} text="set up an identity in the workshop." />
+        <EmptyClaim t={t} text="local mode · sync is off. you can still log films, but there's no public profile to claim." />
+      </div>
+    );
+  }
+
+  if (auth.status === 'error') {
+    return (
+      <div style={{ padding: '20px' }}>
+        {headerRow}
+        <EmptyClaim t={t} text={`auth error · ${auth.error ?? 'unknown'}. open the workshop to retry.`} />
       </div>
     );
   }
@@ -85,7 +94,7 @@ export default function ProfilePage() {
     return (
       <div style={{ padding: '20px' }}>
         {headerRow}
-        <EmptyClaim t={t} text="you haven't claimed a handle yet." />
+        <OnboardingCard t={t} isAnon={auth.status === 'anon'} />
       </div>
     );
   }
@@ -322,4 +331,125 @@ function Center({
       color: t.creamDim,
     }}>{text}</div>
   );
+}
+
+function OnboardingCard({ t, isAnon }: { t: Theme; isAnon: boolean }) {
+  const [handle, setHandle] = React.useState('');
+  const [name, setName] = React.useState('');
+  const [bio, setBio] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState<string | null>(null);
+
+  const claim = async () => {
+    setSaving(true);
+    setMsg(null);
+    const err = await saveMyProfile({ handle, name, bio });
+    setSaving(false);
+    if (err) setMsg(err);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{
+        fontFamily: LumiereType.display, fontSize: 36, lineHeight: 0.95,
+        color: t.cream, letterSpacing: -1, marginTop: 8,
+      }}>claim a<br/><span style={{ fontStyle: 'italic', color: t.signal }}>handle</span></div>
+      <div style={{
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
+        color: t.creamDim, lineHeight: 1.45,
+      }}>name yourself so others can find you. you can change it later.</div>
+
+      <div style={{
+        border: `1px solid ${t.line}`, padding: 14, background: t.surface,
+        display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4,
+      }}>
+        <OnboardField label="handle" t={t}>
+          <input
+            value={handle}
+            onChange={e => setHandle(e.target.value)}
+            placeholder="yourname"
+            autoCapitalize="off"
+            autoCorrect="off"
+            style={onboardInputStyle(t)}
+          />
+        </OnboardField>
+        <OnboardField label="name (optional)" t={t}>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="display name"
+            style={onboardInputStyle(t)}
+          />
+        </OnboardField>
+        <OnboardField label="bio (optional)" t={t}>
+          <textarea
+            value={bio}
+            onChange={e => setBio(e.target.value)}
+            placeholder="one line about you"
+            rows={2}
+            style={{ ...onboardInputStyle(t), resize: 'vertical' }}
+          />
+        </OnboardField>
+        {msg && (
+          <div style={{
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
+            textTransform: 'uppercase', color: t.danger,
+          }}>{msg}</div>
+        )}
+        <button onClick={claim} disabled={saving || !handle.trim()} style={{
+          padding: '12px 0', background: t.cream, color: t.bg,
+          border: 'none', cursor: saving ? 'default' : 'pointer',
+          opacity: saving || !handle.trim() ? 0.6 : 1,
+          fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+          textTransform: 'uppercase', marginTop: 4,
+        }}>{saving ? 'claiming…' : 'claim handle'}</button>
+      </div>
+
+      {isAnon && (
+        <Link href="/profile/settings" style={{
+          padding: '12px 14px', border: `1px dashed ${t.line}`,
+          textDecoration: 'none', color: 'inherit',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div>
+            <div style={{
+              fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+              textTransform: 'uppercase', color: t.muted, marginBottom: 4,
+            }}>tip</div>
+            <div style={{
+              fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
+              color: t.creamDim,
+            }}>attach an email so this account survives a browser wipe.</div>
+          </div>
+          <div style={{
+            fontFamily: LumiereType.mono, fontSize: 18, color: t.creamDim,
+            marginLeft: 12,
+          }}>→</div>
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function OnboardField({ label, t, children }: {
+  label: string; t: Theme; children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+        textTransform: 'uppercase', color: t.muted, marginBottom: 4,
+      }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function onboardInputStyle(t: Theme): React.CSSProperties {
+  return {
+    width: '100%', padding: 10,
+    background: t.bg, color: t.cream,
+    border: `1px solid ${t.line}`, outline: 'none',
+    fontFamily: LumiereType.mono, fontSize: 12, letterSpacing: 0.5,
+  };
 }

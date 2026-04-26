@@ -8,6 +8,7 @@ type Row = {
   handle: string;
   name: string | null;
   bio: string | null;
+  avatar_url: string | null;
   created_at: string;
   top_films: string[] | null;
   top_series: string[] | null;
@@ -19,6 +20,7 @@ function rowToProfile(r: Row): Profile {
     handle: r.handle,
     name: r.name ?? undefined,
     bio: r.bio ?? undefined,
+    avatarUrl: r.avatar_url ?? null,
     createdAt: r.created_at,
     topFilms: r.top_films ?? [],
     topSeries: r.top_series ?? [],
@@ -119,6 +121,63 @@ export async function saveMyProfile(patch: { handle?: string; name?: string; bio
   myProfile = rowToProfile(data as Row);
   myProfileState = 'loaded';
   notifyMine();
+  return null;
+}
+
+const ACCEPTED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+export async function uploadMyAvatar(file: File): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb || !myUserId) return 'not signed in';
+  if (!myProfile) return 'claim a handle first';
+  if (!(ACCEPTED_AVATAR_TYPES as readonly string[]).includes(file.type)) {
+    return 'use jpg, png, or webp';
+  }
+  if (file.size > MAX_AVATAR_BYTES) return 'max 2 MB';
+
+  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const path = `${myUserId}/avatar-${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await sb.storage
+    .from('avatars')
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (uploadError) return uploadError.message;
+
+  const { data: urlData } = sb.storage.from('avatars').getPublicUrl(path);
+  const url = urlData.publicUrl;
+
+  const prev = myProfile;
+  myProfile = { ...myProfile, avatarUrl: url };
+  notifyMine();
+
+  const { error: updateError } = await sb
+    .from('profiles')
+    .update({ avatar_url: url, updated_at: new Date().toISOString() })
+    .eq('id', myUserId);
+  if (updateError) {
+    myProfile = prev;
+    notifyMine();
+    return updateError.message;
+  }
+  return null;
+}
+
+export async function clearMyAvatar(): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb || !myUserId || !myProfile) return 'not signed in';
+  const prev = myProfile;
+  myProfile = { ...myProfile, avatarUrl: null };
+  notifyMine();
+  const { error } = await sb
+    .from('profiles')
+    .update({ avatar_url: null, updated_at: new Date().toISOString() })
+    .eq('id', myUserId);
+  if (error) {
+    myProfile = prev;
+    notifyMine();
+    return error.message;
+  }
   return null;
 }
 

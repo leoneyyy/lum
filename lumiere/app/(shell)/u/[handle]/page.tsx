@@ -58,7 +58,7 @@ export default function UserPage() {
 
   const isSelf = me?.id === profile.id;
   const isFollowing = followingIds.includes(profile.id);
-  const avatar = avatarFor(profile.id, profile.handle);
+  const avatar = avatarFor(profile.id, profile.handle, profile.avatarUrl);
 
   return (
     <div>

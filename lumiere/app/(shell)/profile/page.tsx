@@ -9,7 +9,7 @@ import type { ThemeKey, Voice, DimKey } from '@/app/components/lib/tokens';
 import type { Film, MediaKind, Profile } from '@/app/components/lib/types';
 import { useLog } from '@/app/components/lib/logStore';
 import { useAuth } from '@/app/components/AuthProvider';
-import { useMyProfile, saveMyProfile, setTopPicks } from '@/app/components/lib/profileStore';
+import { useMyProfile, saveMyProfile, setTopPicks, uploadMyAvatar, clearMyAvatar } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
 import { useFilmsForEntries } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
@@ -353,7 +353,7 @@ function HandleBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
   if (auth.status !== 'anon' && auth.status !== 'user') return null;
 
   const avatar = profile
-    ? avatarFor(profile.id, profile.handle)
+    ? avatarFor(profile.id, profile.handle, profile.avatarUrl)
     : auth.userId ? avatarFor(auth.userId) : { initials: '??', tint: t.muted };
 
   if (editing) {
@@ -375,7 +375,7 @@ function HandleBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
         display: 'flex', alignItems: 'center', gap: 12,
         padding: '12px 14px', border: `1px solid ${t.line}`, background: t.surface,
       }}>
-        <Avatar friend={avatar} size={40} t={t} />
+        <AvatarUploader avatar={avatar} hasAvatar={!!profile.avatarUrl} t={t} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 1.6,
@@ -595,6 +595,7 @@ function TopPicksOwnBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
   }, [rawFilms, overrides]);
 
   const [picker, setPicker] = React.useState<MediaKind | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
   if (!profile) {
     return (
@@ -607,22 +608,24 @@ function TopPicksOwnBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
   }
 
   const addPick = async (kind: MediaKind, filmId: string) => {
-    if (kind === 'film') {
-      const next = [...profile.topFilms.filter(id => id !== filmId), filmId].slice(-4);
-      await setTopPicks({ topFilms: next });
-    } else {
-      const next = [...profile.topSeries.filter(id => id !== filmId), filmId].slice(-4);
-      await setTopPicks({ topSeries: next });
-    }
+    setError(null);
     setPicker(null);
+    const err = kind === 'film'
+      ? await setTopPicks({
+          topFilms: [...profile.topFilms.filter(id => id !== filmId), filmId].slice(-4),
+        })
+      : await setTopPicks({
+          topSeries: [...profile.topSeries.filter(id => id !== filmId), filmId].slice(-4),
+        });
+    if (err) setError(err);
   };
 
   const removePick = async (kind: MediaKind, filmId: string) => {
-    if (kind === 'film') {
-      await setTopPicks({ topFilms: profile.topFilms.filter(id => id !== filmId) });
-    } else {
-      await setTopPicks({ topSeries: profile.topSeries.filter(id => id !== filmId) });
-    }
+    setError(null);
+    const err = kind === 'film'
+      ? await setTopPicks({ topFilms: profile.topFilms.filter(id => id !== filmId) })
+      : await setTopPicks({ topSeries: profile.topSeries.filter(id => id !== filmId) });
+    if (err) setError(err);
   };
 
   return (
@@ -643,6 +646,13 @@ function TopPicksOwnBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
         onAdd={profile.topSeries.length < 4 ? () => setPicker('series') : undefined}
         onRemove={(id) => void removePick('series', id)}
       />
+      {error && (
+        <div style={{
+          padding: '10px 12px', border: `1px solid ${t.danger}`, background: t.surface,
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
+          textTransform: 'uppercase', color: t.danger, lineHeight: 1.5,
+        }}>error · {error}</div>
+      )}
       {picker && (
         <TopPicksPicker
           kind={picker}
@@ -653,6 +663,83 @@ function TopPicksOwnBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
           onPick={(id) => void addPick(picker, id)}
           onClose={() => setPicker(null)}
         />
+      )}
+    </div>
+  );
+}
+
+function AvatarUploader({
+  avatar, hasAvatar, t,
+}: {
+  avatar: { initials: string; tint: string; avatarUrl?: string | null };
+  hasAvatar: boolean;
+  t: ReturnType<typeof useTweaks>['theme'];
+}) {
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    setErr(null);
+    const error = await uploadMyAvatar(file);
+    setBusy(false);
+    if (error) setErr(error);
+  };
+
+  const onClear = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    const error = await clearMyAvatar();
+    setBusy(false);
+    if (error) setErr(error);
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => inputRef.current?.click()}
+        disabled={busy}
+        title="change picture"
+        style={{
+          padding: 0, border: 'none', background: 'transparent',
+          cursor: busy ? 'default' : 'pointer', position: 'relative',
+          display: 'block', borderRadius: '50%', overflow: 'hidden',
+          opacity: busy ? 0.6 : 1,
+        }}
+      >
+        <Avatar friend={avatar} size={48} t={t} />
+      </button>
+      {hasAvatar && !busy && (
+        <button
+          onClick={onClear}
+          title="remove picture"
+          style={{
+            position: 'absolute', top: -4, right: -4,
+            width: 18, height: 18, borderRadius: '50%',
+            background: t.bg, border: `1px solid ${t.line}`,
+            color: t.creamDim, cursor: 'pointer', padding: 0,
+            fontFamily: LumiereType.mono, fontSize: 9, lineHeight: 1,
+          }}
+        >×</button>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={onFile}
+        style={{ display: 'none' }}
+      />
+      {err && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4,
+          fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.2,
+          textTransform: 'uppercase', color: t.danger, whiteSpace: 'nowrap',
+        }}>{err}</div>
       )}
     </div>
   );

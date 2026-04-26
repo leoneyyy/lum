@@ -9,7 +9,7 @@ import { fetchProfileByHandle, useMyProfile } from '@/app/components/lib/profile
 import { useFollowing, follow, unfollow } from '@/app/components/lib/followStore';
 import { usePublicEntriesByUser } from '@/app/components/lib/feedStore';
 import { useFilmsForEntries, useFilmsByIds } from '@/app/components/lib/useFilms';
-import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
+import { useFilmOverrides, useFilmOverridesFor, applyOverride } from '@/app/components/lib/filmOverrides';
 import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
 import type { Film, LogEntry, Profile } from '@/app/components/lib/types';
 import { Avatar, avatarFor, Eyebrow, ReactionButton } from '@/app/components/ui/Primitives';
@@ -44,9 +44,16 @@ export default function UserPage() {
     [profile?.topFilms, profile?.topSeries],
   );
   const pickFilms = useFilmsByIds(pickIds);
-  const overrides = useFilmOverrides();
+  // when viewing someone else's profile, use their overrides; on your
+  // own page useFilmOverrides == useFilmOverridesFor(me.id) data anyway.
+  const ownerOverrides = useFilmOverridesFor(userId);
+  const myOverrides = useFilmOverrides();
+  const overrides = userId && me?.id === userId ? myOverrides : ownerOverrides;
   const films = React.useMemo<Record<string, Film>>(() => {
-    const out: Record<string, Film> = { ...pickFilms };
+    const out: Record<string, Film> = {};
+    for (const [id, f] of Object.entries(pickFilms)) {
+      out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
+    }
     for (const [id, f] of Object.entries(rawFilms)) {
       out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
     }
@@ -60,14 +67,47 @@ export default function UserPage() {
   const isFollowing = followingIds.includes(profile.id);
   const avatar = avatarFor(profile.id, profile.handle, profile.avatarUrl);
 
+  const heroBackdrop = (() => {
+    for (const id of [...profile.topFilms, ...profile.topSeries]) {
+      const f = films[id];
+      if (f?.backdropUrl) return f.backdropUrl;
+    }
+    return null;
+  })();
+
   return (
     <div>
+      {heroBackdrop && (
+        <div style={{
+          position: 'relative', height: 220, overflow: 'hidden',
+          borderBottom: `1px solid ${t.line}`,
+        }}>
+          <img src={heroBackdrop} alt="" style={{
+            width: '100%', height: '100%', objectFit: 'cover',
+            filter: 'brightness(0.5) saturate(0.85)',
+          }} />
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(180deg, transparent 30%, ${t.bg})`,
+          }} />
+          <button onClick={() => router.back()} style={{
+            position: 'absolute', top: 14, left: 18,
+            background: 'rgba(0,0,0,0.45)', border: `1px solid ${t.line}`,
+            padding: '6px 10px', cursor: 'pointer',
+            color: t.cream,
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+            textTransform: 'uppercase',
+          }}>← back</button>
+        </div>
+      )}
       <div style={{ padding: '20px 20px 24px', borderBottom: `1px solid ${t.line}` }}>
-        <button onClick={() => router.back()} style={{
-          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
-          textTransform: 'uppercase', color: t.muted, marginBottom: 16,
-        }}>← back</button>
+        {!heroBackdrop && (
+          <button onClick={() => router.back()} style={{
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+            textTransform: 'uppercase', color: t.muted, marginBottom: 16,
+          }}>← back</button>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <Avatar friend={avatar} size={64} t={t} />

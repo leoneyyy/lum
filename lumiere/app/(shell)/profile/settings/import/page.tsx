@@ -21,6 +21,7 @@ interface DiaryRow {
   rating: string;        // 0.5 .. 5.0
   rewatch: string;       // "Yes" | ""
   review?: string;       // joined from reviews.csv
+  watchOnly?: boolean;   // true if this row came from watched.csv only
 }
 
 interface Match {
@@ -35,10 +36,11 @@ export default function ImportPage() {
   const router = useRouter();
   const auth = useAuth();
   const [diary, setDiary] = React.useState<DiaryRow[] | null>(null);
+  const [watchedFile, setWatchedFile] = React.useState(false);
   const [matches, setMatches] = React.useState<Match[]>([]);
   const [phase, setPhase] = React.useState<'idle' | 'matching' | 'preview' | 'importing' | 'done'>('idle');
   const [progress, setProgress] = React.useState({ done: 0, total: 0 });
-  const [result, setResult] = React.useState<{ imported: number; skipped: number; error?: string } | null>(null);
+  const [result, setResult] = React.useState<{ imported: number; skipped: number; markedWatched: number; error?: string } | null>(null);
   const [topMsg, setTopMsg] = React.useState<string | null>(null);
 
   const onDiary = async (file: File) => {
@@ -64,6 +66,32 @@ export default function ImportPage() {
       setDiary(diary.map(r => ({ ...r, review: reviewByUri.get(r.uri) })));
     } catch (e) {
       setTopMsg(e instanceof Error ? e.message : 'failed to parse reviews.csv');
+    }
+  };
+
+  const onWatched = async (file: File) => {
+    setTopMsg(null);
+    try {
+      const text = await file.text();
+      const rows = parseWatchedCSV(text);
+      const existingUris = new Set((diary ?? []).filter(r => !r.watchOnly).map(r => r.uri));
+      const watchOnly: DiaryRow[] = rows
+        .filter(r => !existingUris.has(r.uri))
+        .map(r => ({
+          date: r.date,
+          watchedDate: r.date,
+          name: r.name,
+          year: r.year,
+          uri: r.uri,
+          rating: '',
+          rewatch: '',
+          watchOnly: true,
+        }));
+      const remainingDiary = (diary ?? []).filter(r => !r.watchOnly);
+      setDiary([...remainingDiary, ...watchOnly]);
+      setWatchedFile(true);
+    } catch (e) {
+      setTopMsg(e instanceof Error ? e.message : 'failed to parse watched.csv');
     }
   };
 
@@ -106,8 +134,9 @@ export default function ImportPage() {
 
   const submit = async () => {
     setPhase('importing');
-    const items = matches
-      .filter(m => m.status === 'matched' && m.film)
+    const matched = matches.filter(m => m.status === 'matched' && m.film);
+    const logItems = matched
+      .filter(m => !m.row.watchOnly)
       .map(m => ({
         filmId: m.film!.id,
         cry: m.row.rating ? Math.round(parseFloat(m.row.rating) * 20) : 0,
@@ -115,12 +144,14 @@ export default function ImportPage() {
         createdAt: toIso(m.row.watchedDate || m.row.date),
         visibility: 'private' as const,
       }));
-    const r = await importEntries(items);
+    const allFilmIds = matched.map(m => m.film!.id);
+    const r = await importEntries(logItems);
+    let markedWatched = 0;
     if (!r.error) {
-      const filmIds = items.map(i => i.filmId);
-      void markManyWatched(filmIds);
+      const err = await markManyWatched(allFilmIds);
+      if (!err) markedWatched = allFilmIds.length;
     }
-    setResult(r);
+    setResult({ ...r, markedWatched });
     setPhase('done');
   };
 
@@ -179,6 +210,17 @@ export default function ImportPage() {
           disabled={!diary || phase !== 'idle'}
         />
 
+        <FileSlot
+          t={t}
+          label="watched.csv (optional)"
+          subtitle={watchedFile
+            ? `${diary?.filter(r => r.watchOnly).length ?? 0} watch-only entries added`
+            : 'every film you ever watched · marks as watched without a log entry'}
+          loaded={watchedFile}
+          onFile={onWatched}
+          disabled={phase !== 'idle'}
+        />
+
         {phase === 'idle' && diary && (
           <button onClick={startMatching} style={{
             padding: '14px 0', background: t.cream, color: t.bg,
@@ -232,7 +274,7 @@ export default function ImportPage() {
                   fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
                   color: t.creamDim, lineHeight: 1.4,
                 }}>
-                  {result.imported} imported · {result.skipped} skipped (already in your log).
+                  {result.imported} log entries imported · {result.skipped} skipped (already in your log) · {result.markedWatched} films marked watched.
                 </div>
               </>
             )}
@@ -352,9 +394,15 @@ function Row({ t, m }: { t: Theme; m: Match }) {
           fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.2,
           textTransform: 'uppercase', color: t.muted, marginTop: 2,
         }}>
-          {m.row.watchedDate || m.row.date}
-          {m.row.rating && ` · ${m.row.rating}★`}
-          {m.row.review && ' · review'}
+          {m.row.watchOnly
+            ? 'watched only'
+            : (
+              <>
+                {m.row.watchedDate || m.row.date}
+                {m.row.rating && ` · ${m.row.rating}★`}
+                {m.row.review && ' · review'}
+              </>
+            )}
           {m.status === 'unmatched' && ' · no tmdb match'}
           {m.status === 'error' && ` · ${m.error}`}
           {m.status === 'pending' && ' · matching…'}
@@ -371,15 +419,21 @@ function SubmitBar({
   matches: Match[];
   onSubmit: () => void;
 }) {
-  const n = matches.filter(m => m.status === 'matched').length;
+  const matched = matches.filter(m => m.status === 'matched');
+  const logCount = matched.filter(m => !m.row.watchOnly).length;
+  const watchOnlyCount = matched.length - logCount;
+  const total = matched.length;
   return (
-    <button onClick={onSubmit} disabled={n === 0} style={{
+    <button onClick={onSubmit} disabled={total === 0} style={{
       padding: '14px 0', background: t.cream, color: t.bg,
-      border: 'none', cursor: n === 0 ? 'default' : 'pointer',
-      opacity: n === 0 ? 0.4 : 1,
+      border: 'none', cursor: total === 0 ? 'default' : 'pointer',
+      opacity: total === 0 ? 0.4 : 1,
       fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2.5,
       textTransform: 'uppercase',
-    }}>import {n} entries (private)</button>
+    }}>
+      import {logCount} log{logCount === 1 ? '' : 's'}
+      {watchOnlyCount > 0 && ` + ${watchOnlyCount} watched`}
+    </button>
   );
 }
 
@@ -467,6 +521,25 @@ function parseReviewsCSV(text: string): Map<string, string> {
     if (uri && review) out.set(uri, review);
   }
   return out;
+}
+
+interface WatchedRow {
+  date: string;
+  name: string;
+  year: string;
+  uri: string;
+}
+
+function parseWatchedCSV(text: string): WatchedRow[] {
+  const rows = parseCSV(text);
+  if (rows.length === 0) throw new Error('empty watched.csv');
+  if (!('Name' in rows[0])) throw new Error('watched.csv missing column: Name');
+  return rows.map(r => ({
+    date: r['Date'] ?? '',
+    name: r['Name'] ?? '',
+    year: r['Year'] ?? '',
+    uri: r['Letterboxd URI'] ?? '',
+  })).filter(r => r.name);
 }
 
 async function matchFilm(row: DiaryRow): Promise<Film | null> {

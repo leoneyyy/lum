@@ -23,6 +23,7 @@ import { useFollowing } from '@/app/components/lib/followStore';
 import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
 import { useIsWatched, markWatched, unmarkWatched } from '@/app/components/lib/watchedStore';
 import { useIsOnWatchlist, addToWatchlist, removeFromWatchlist } from '@/app/components/lib/watchlistStore';
+import { ListPicker } from '@/app/components/ui/ListPicker';
 
 export default function FilmDetailPage() {
   const params = useParams<{ id: string }>();
@@ -221,6 +222,7 @@ export default function FilmDetailPage() {
               <WatchedToggle filmId={id} t={t} />
               <WatchlistToggle filmId={id} t={t} />
             </div>
+            <ListPickerButton filmId={id} t={t} />
           </div>
         ) : (
           <div style={{
@@ -702,6 +704,26 @@ function WatchedToggle({ filmId, t }: { filmId: string; t: ReturnType<typeof use
       </span>
       {isWatched ? 'watched' : 'mark watched'}
     </button>
+  );
+}
+
+function ListPickerButton({ filmId, t }: { filmId: string; t: ReturnType<typeof useTweaks>['theme'] }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        width: '100%', padding: '12px 0',
+        background: 'transparent', color: t.creamDim,
+        border: `1px solid ${t.line}`, cursor: 'pointer',
+        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+        textTransform: 'uppercase',
+      }}>
+        <span style={{ display: 'inline-block', width: 12, textAlign: 'center' }}>+</span>
+        add to list
+      </button>
+      {open && <ListPicker filmId={filmId} t={t} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 

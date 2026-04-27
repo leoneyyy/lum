@@ -1,6 +1,6 @@
 // lib/api.ts — client-side fetchers (hit our own API, never TMDB directly)
 import type { Film } from './types';
-import type { ImageCatalog, SeasonSummary, EpisodeSummary } from './tmdb';
+import type { ImageCatalog, SeasonSummary, EpisodeSummary, Person, PersonCredit } from './tmdb';
 
 export async function searchFilms(q: string): Promise<Film[]> {
   if (!q.trim()) return [];
@@ -32,5 +32,19 @@ export async function getSeriesEpisodes(
     : `/api/films/${encodeURIComponent(id)}/episodes`;
   const r = await fetch(url);
   if (!r.ok) throw new Error('episodes failed');
+  return r.json();
+}
+
+export async function searchPeople(q: string): Promise<Person[]> {
+  if (!q.trim()) return [];
+  const r = await fetch(`/api/people/search?q=${encodeURIComponent(q)}`);
+  if (!r.ok) throw new Error('person search failed');
+  const j = await r.json();
+  return j.results || [];
+}
+
+export async function getPersonCredits(id: string): Promise<{ person: Person; credits: PersonCredit[] } | null> {
+  const r = await fetch(`/api/people/${encodeURIComponent(id)}`);
+  if (!r.ok) return null;
   return r.json();
 }

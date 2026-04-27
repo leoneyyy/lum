@@ -191,3 +191,90 @@ export async function getEpisode(tvId: number, season: number, episode: number):
     posterAccent: '#ebe6d8',
   };
 }
+
+// ── people ─────────────────────────────────────────────────────────
+
+export interface Person {
+  id: string;            // `tmdb_p_${tmdbId}`
+  tmdbId: number;
+  name: string;
+  profileUrl: string | null;
+  knownForDept?: string;
+  knownFor: Array<{ id: string; title: string; year: number; kind: 'film' | 'series'; posterUrl: string | null }>;
+}
+
+function mapPersonSearchResult(r: any): Person {
+  const knownFor = (r.known_for || [])
+    .filter((k: any) => k.media_type === 'movie' || k.media_type === 'tv')
+    .map((k: any) => k.media_type === 'tv' ? mapTv(k) : mapMovie(k))
+    .map((f: Film) => ({ id: f.id, title: f.title, year: f.year, kind: f.kind, posterUrl: f.posterUrl ?? null }));
+  return {
+    id: `tmdb_p_${r.id}`,
+    tmdbId: r.id,
+    name: r.name || '',
+    profileUrl: r.profile_path ? `${IMG_BASE}/w185${r.profile_path}` : null,
+    knownForDept: r.known_for_department,
+    knownFor,
+  };
+}
+
+export async function searchPeople(query: string): Promise<Person[]> {
+  if (!query) return [];
+  const url = `${TMDB_BASE}/search/person?query=${encodeURIComponent(query)}&include_adult=false`;
+  const r = await fetch(url, { headers: authHeaders(), next: { revalidate: 300 } });
+  if (!r.ok) throw new Error(`TMDB person search failed: ${r.status}`);
+  const json = await r.json();
+  return (json.results || []).map(mapPersonSearchResult);
+}
+
+export interface PersonCredit {
+  id: string;
+  title: string;
+  year: number;
+  kind: 'film' | 'series';
+  posterUrl: string | null;
+  character?: string;
+  department?: string;
+  job?: string;
+}
+
+export async function getPersonCredits(tmdbId: number): Promise<{ person: Person; credits: PersonCredit[] }> {
+  const personUrl = `${TMDB_BASE}/person/${tmdbId}?append_to_response=combined_credits`;
+  const r = await fetch(personUrl, { headers: authHeaders(), next: { revalidate: 3600 } });
+  if (!r.ok) throw new Error(`TMDB person ${tmdbId} failed: ${r.status}`);
+  const j = await r.json();
+  const person: Person = {
+    id: `tmdb_p_${j.id}`,
+    tmdbId: j.id,
+    name: j.name || '',
+    profileUrl: j.profile_path ? `${IMG_BASE}/w185${j.profile_path}` : null,
+    knownForDept: j.known_for_department,
+    knownFor: [],
+  };
+  const cast = (j.combined_credits?.cast || []).map((c: any) => mapCredit(c, c.character, undefined, undefined));
+  const crew = (j.combined_credits?.crew || []).map((c: any) => mapCredit(c, undefined, c.department, c.job));
+  // dedupe by id, keep cast over crew when both
+  const seen = new Map<string, PersonCredit>();
+  for (const c of [...cast, ...crew]) {
+    if (!seen.has(c.id)) seen.set(c.id, c);
+  }
+  const credits = Array.from(seen.values()).sort((a, b) => (b.year || 0) - (a.year || 0));
+  return { person, credits };
+}
+
+function mapCredit(c: any, character?: string, department?: string, job?: string): PersonCredit {
+  const isTv = c.media_type === 'tv';
+  const id = isTv ? `tmdb_t_${c.id}` : `tmdb_m_${c.id}`;
+  const title = isTv ? (c.name || c.original_name) : (c.title || c.original_title);
+  const dateStr = isTv ? (c.first_air_date || '') : (c.release_date || '');
+  return {
+    id,
+    title: title || '',
+    year: +(dateStr || '').slice(0, 4) || 0,
+    kind: isTv ? 'series' : 'film',
+    posterUrl: c.poster_path ? `${IMG_BASE}/w500${c.poster_path}` : null,
+    character: character || undefined,
+    department: department || undefined,
+    job: job || undefined,
+  };
+}

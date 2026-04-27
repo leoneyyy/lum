@@ -10,6 +10,7 @@ import { usePublicEntriesByUser } from '@/app/components/lib/feedStore';
 import { useFilmsForEntries, useFilmsByIds } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
+import { useWatched } from '@/app/components/lib/watchedStore';
 import type { Film, LogEntry } from '@/app/components/lib/types';
 import { Avatar, avatarFor, Eyebrow, ReactionButton } from '@/app/components/ui/Primitives';
 import { TopPicksGrid } from '@/app/components/ui/TopPicks';
@@ -179,6 +180,8 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+
+      <WatchedSection t={t} />
 
       <div style={{ padding: '20px' }}>
         <Eyebrow num="§" label="your public log" t={t} style={{ marginBottom: 16 }} />
@@ -452,4 +455,68 @@ function onboardInputStyle(t: Theme): React.CSSProperties {
     border: `1px solid ${t.line}`, outline: 'none',
     fontFamily: LumiereType.mono, fontSize: 12, letterSpacing: 0.5,
   };
+}
+
+function WatchedSection({ t }: { t: Theme }) {
+  const { ids, state } = useWatched();
+  const ordered = React.useMemo(() => ids.slice().reverse(), [ids]); // newest first
+  const visible = React.useMemo(() => ordered.slice(0, 24), [ordered]);
+  const films = useFilmsByIds(visible);
+  const overrides = useFilmOverrides();
+  const enriched = React.useMemo<Record<string, Film>>(() => {
+    const out: Record<string, Film> = {};
+    for (const [id, f] of Object.entries(films)) {
+      out[id] = overrides[id] ? applyOverride(f, overrides[id]) : f;
+    }
+    return out;
+  }, [films, overrides]);
+
+  if (state !== 'loaded' || ids.length === 0) return null;
+
+  return (
+    <div style={{ padding: '20px', borderBottom: `1px solid ${t.line}` }}>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14,
+      }}>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+          textTransform: 'uppercase', color: t.muted,
+        }}>
+          <span style={{ color: t.accent }}>◇</span> watched
+        </div>
+        <div style={{
+          fontFamily: LumiereType.display, fontSize: 22, lineHeight: 1,
+          color: t.cream, letterSpacing: -0.4,
+        }}>{ids.length.toString().padStart(3, '0')}</div>
+        <div style={{ flex: 1, height: 1, background: t.line }} />
+      </div>
+      <div style={{
+        display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4,
+        WebkitOverflowScrolling: 'touch',
+      }}>
+        {visible.map(id => {
+          const film = enriched[id];
+          return (
+            <Link
+              key={id}
+              href={`/films/${encodeURIComponent(id)}`}
+              style={{
+                flexShrink: 0, width: 72, textDecoration: 'none', color: 'inherit',
+              }}
+              title={film?.title}
+            >
+              {film
+                ? <Poster film={film} size="sm" t={t} style={{ width: 72, height: 104 }} />
+                : <div style={{
+                    width: 72, height: 104, background: t.surfaceHi,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: LumiereType.mono, fontSize: 10, color: t.muted,
+                  }}>·</div>
+              }
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

@@ -70,6 +70,7 @@ export default function SettingsPage() {
         <Stat t={t} label="avg cry" value={avg.toString().padStart(3, '0')} />
         <Stat t={t} label="peak cry" value={max.toString().padStart(3, '0')} />
         <FollowingStat t={t} />
+        <ImportLink t={t} />
 
         <div style={{ height: 28 }} />
         <Eyebrow num="02" label="canon" t={t} style={{ marginBottom: 12 }} />
@@ -541,6 +542,25 @@ function FollowingStat({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
         fontFamily: LumiereType.display, fontSize: 28, lineHeight: 1,
         color: t.cream, letterSpacing: -0.6,
       }}>{value}</div>
+    </Link>
+  );
+}
+
+function ImportLink({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
+  return (
+    <Link href="/profile/settings/import" style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+      padding: '10px 0', borderBottom: `1px solid ${t.lineSoft}`,
+      textDecoration: 'none', color: 'inherit',
+    }}>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+        textTransform: 'uppercase', color: t.muted,
+      }}>import letterboxd →</div>
+      <div style={{
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 13,
+        color: t.creamDim,
+      }}>diary.csv</div>
     </Link>
   );
 }

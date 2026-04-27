@@ -11,7 +11,8 @@ import type { Film, MediaKind, Profile } from '@/app/components/lib/types';
 import { useLog } from '@/app/components/lib/logStore';
 import { useAuth } from '@/app/components/AuthProvider';
 import {
-  useMyProfile, saveMyProfile, setTopPicks, uploadMyAvatar, clearMyAvatar,
+  useMyProfile, saveMyProfile, setTopPicks, setPublicTheme,
+  uploadMyAvatar, clearMyAvatar,
 } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
 import { useWatched } from '@/app/components/lib/watchedStore';
@@ -105,7 +106,11 @@ export default function SettingsPage() {
         </div>
 
         <div style={{ height: 28 }} />
-        <Eyebrow num="04" label="cry style" t={t} style={{ marginBottom: 12 }} />
+        <Eyebrow num="04" label="public theme" t={t} style={{ marginBottom: 12 }} />
+        <PublicThemeBlock t={t} />
+
+        <div style={{ height: 28 }} />
+        <Eyebrow num="05" label="cry style" t={t} style={{ marginBottom: 12 }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {CRY_STYLES.map(s => {
             const active = tweaks.cryStyle === s;
@@ -126,7 +131,7 @@ export default function SettingsPage() {
         </div>
 
         <div style={{ height: 28 }} />
-        <Eyebrow num="05" label="voice" t={t} style={{ marginBottom: 12 }} />
+        <Eyebrow num="06" label="voice" t={t} style={{ marginBottom: 12 }} />
         <div style={{ display: 'flex', gap: 8 }}>
           {VOICES.map(v => {
             const active = tweaks.voice === v;
@@ -144,7 +149,7 @@ export default function SettingsPage() {
         </div>
 
         <div style={{ height: 28 }} />
-        <Eyebrow num="06" label="dimensions" t={t} style={{ marginBottom: 12 }} />
+        <Eyebrow num="07" label="dimensions" t={t} style={{ marginBottom: 12 }} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {DEFAULT_DIMS.map(d => {
             const active = tweaks.dims.includes(d.key as DimKey);
@@ -773,6 +778,99 @@ function AvatarUploader({
           fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.2,
           textTransform: 'uppercase', color: t.danger, whiteSpace: 'nowrap',
         }}>{err}</div>
+      )}
+    </div>
+  );
+}
+
+function PublicThemeBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
+  const { profile } = useMyProfile();
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  if (!profile) {
+    return (
+      <div style={{
+        padding: '12px 14px', border: `1px dashed ${t.line}`,
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
+        color: t.creamDim,
+      }}>claim a handle first to skin your public profile.</div>
+    );
+  }
+
+  const apply = async (next: ThemeKey | null) => {
+    setBusy(next ?? '__clear__');
+    setErr(null);
+    const e = await setPublicTheme(next);
+    setBusy(null);
+    if (e) setErr(e);
+  };
+
+  const current = profile.publicTheme ?? null;
+
+  return (
+    <div>
+      <div style={{
+        fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 13,
+        color: t.creamDim, marginBottom: 12, lineHeight: 1.45,
+      }}>colors others see when they open your profile. defaults to whatever theme they&apos;re using.</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+        {THEMES.map(key => {
+          const th = LumiereThemes[key];
+          const active = current === key;
+          const loading = busy === key;
+          return (
+            <button
+              key={key}
+              onClick={() => void apply(key)}
+              disabled={busy !== null}
+              style={{
+                padding: 12, cursor: busy ? 'default' : 'pointer', textAlign: 'left',
+                background: th.bg, color: th.cream,
+                border: `1px solid ${active ? th.signal : t.line}`,
+                opacity: loading ? 0.6 : 1,
+                position: 'relative',
+              }}
+            >
+              <div style={{
+                fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+                textTransform: 'uppercase', color: th.muted, marginBottom: 6,
+                display: 'flex', justifyContent: 'space-between',
+              }}>
+                <span>{key}</span>
+                {active && <span style={{ color: th.signal }}>✓ public</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[th.cream, th.signal, th.accent, th.muted].map((c, i) => (
+                  <div key={i} style={{ flex: 1, height: 16, background: c }} />
+                ))}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={() => void apply(null)}
+        disabled={busy !== null || current === null}
+        style={{
+          display: 'block', width: '100%', marginTop: 10,
+          padding: '10px 0', background: 'transparent',
+          border: `1px solid ${t.line}`, color: t.creamDim,
+          cursor: busy || current === null ? 'default' : 'pointer',
+          opacity: busy === '__clear__' ? 0.6 : current === null ? 0.4 : 1,
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+          textTransform: 'uppercase',
+        }}
+      >{current === null ? '✓ using viewer\'s theme' : 'use viewer\'s theme'}</button>
+
+      {err && (
+        <div style={{
+          marginTop: 8,
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
+          textTransform: 'uppercase', color: t.danger,
+        }}>error · {err}</div>
       )}
     </div>
   );

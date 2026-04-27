@@ -3,7 +3,8 @@ import React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useTweaks } from '@/app/components/TweaksProvider';
-import { LumiereType } from '@/app/components/lib/tokens';
+import { LumiereType, LumiereThemes } from '@/app/components/lib/tokens';
+import type { Theme } from '@/app/components/lib/tokens';
 import { useAuth } from '@/app/components/AuthProvider';
 import { fetchProfileByHandle, useMyProfile } from '@/app/components/lib/profileStore';
 import { useFollowing, follow, unfollow } from '@/app/components/lib/followStore';
@@ -18,7 +19,7 @@ import { CryMeter } from '@/app/components/ui/CryMeter';
 import { Poster } from '@/app/components/ui/Poster';
 
 export default function UserPage() {
-  const { theme: t, tweaks } = useTweaks();
+  const { theme: viewerTheme, tweaks } = useTweaks();
   const router = useRouter();
   const params = useParams<{ handle: string }>();
   const handle = decodeURIComponent(params.handle ?? '').toLowerCase();
@@ -35,6 +36,7 @@ export default function UserPage() {
   }, [handle]);
   const isLoading = !handle || result?.handle !== handle;
   const profile: Profile | null = result?.handle === handle ? result.profile : null;
+  const t: Theme = profile?.publicTheme ? LumiereThemes[profile.publicTheme] : viewerTheme;
   const userId = profile?.id ?? '';
   const feed = usePublicEntriesByUser(userId, 40);
   const reactions = useReactions(feed.entries.map(e => e.id));

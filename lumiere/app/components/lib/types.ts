@@ -50,6 +50,7 @@ export interface Profile {
   createdAt: string;
   topFilms: string[];
   topSeries: string[];
+  publicTheme?: 'indigo' | 'oxblood' | 'bone' | 'acid' | null;
 }
 
 export interface Friend {

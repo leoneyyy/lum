@@ -475,8 +475,9 @@ function WatchedSection({ t }: { t: Theme }) {
 
   return (
     <div style={{ padding: '20px', borderBottom: `1px solid ${t.line}` }}>
-      <div style={{
+      <Link href="/profile/watched" style={{
         display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14,
+        textDecoration: 'none', color: 'inherit',
       }}>
         <div style={{
           fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
@@ -489,7 +490,11 @@ function WatchedSection({ t }: { t: Theme }) {
           color: t.cream, letterSpacing: -0.4,
         }}>{ids.length.toString().padStart(3, '0')}</div>
         <div style={{ flex: 1, height: 1, background: t.line }} />
-      </div>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+          textTransform: 'uppercase', color: t.creamDim,
+        }}>view all →</div>
+      </Link>
       <div style={{
         display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4,
         WebkitOverflowScrolling: 'touch',

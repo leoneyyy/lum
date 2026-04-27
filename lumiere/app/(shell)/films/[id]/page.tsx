@@ -21,6 +21,7 @@ import { useCircleEntriesForFilm } from '@/app/components/lib/feedStore';
 import { useProfiles } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
 import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
+import { useIsWatched, markWatched, unmarkWatched } from '@/app/components/lib/watchedStore';
 
 export default function FilmDetailPage() {
   const params = useParams<{ id: string }>();
@@ -200,12 +201,15 @@ export default function FilmDetailPage() {
 
       <div style={{ padding: '8px 20px 20px' }}>
         {mode.kind === 'closed' ? (
-          <button onClick={startNew} style={{
-            display: 'block', width: '100%', padding: '16px 0',
-            background: t.cream, color: t.bg, border: 'none', cursor: 'pointer',
-            fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 3,
-            textTransform: 'uppercase',
-          }}>log this →</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button onClick={startNew} style={{
+              display: 'block', width: '100%', padding: '16px 0',
+              background: t.cream, color: t.bg, border: 'none', cursor: 'pointer',
+              fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 3,
+              textTransform: 'uppercase',
+            }}>log this →</button>
+            <WatchedToggle filmId={id} t={t} />
+          </div>
         ) : (
           <div style={{
             border: `1px solid ${t.line}`, padding: 18, marginTop: 4,
@@ -657,5 +661,34 @@ function CenterNote({ t, text }: { t: ReturnType<typeof useTweaks>['theme']; tex
       fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 18,
       color: t.creamDim,
     }}>{text}</div>
+  );
+}
+
+function WatchedToggle({ filmId, t }: { filmId: string; t: ReturnType<typeof useTweaks>['theme'] }) {
+  const isWatched = useIsWatched(filmId);
+  const [busy, setBusy] = React.useState(false);
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    if (isWatched) await unmarkWatched(filmId);
+    else await markWatched(filmId);
+    setBusy(false);
+  };
+  return (
+    <button onClick={onClick} disabled={busy} style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      width: '100%', padding: '12px 0',
+      background: 'transparent',
+      color: isWatched ? t.signal : t.creamDim,
+      border: `1px solid ${isWatched ? t.signal : t.line}`,
+      cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+      fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+      textTransform: 'uppercase',
+    }}>
+      <span style={{ display: 'inline-block', width: 12, textAlign: 'center' }}>
+        {isWatched ? '✓' : '·'}
+      </span>
+      {isWatched ? 'watched' : 'mark watched'}
+    </button>
   );
 }

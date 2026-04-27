@@ -7,6 +7,7 @@ import type { Theme } from '@/app/components/lib/tokens';
 import { useAuth } from '@/app/components/AuthProvider';
 import { searchFilms } from '@/app/components/lib/api';
 import { importEntries } from '@/app/components/lib/logStore';
+import { markManyWatched } from '@/app/components/lib/watchedStore';
 import type { Film } from '@/app/components/lib/types';
 import { Eyebrow } from '@/app/components/ui/Primitives';
 import { Poster } from '@/app/components/ui/Poster';
@@ -115,6 +116,10 @@ export default function ImportPage() {
         visibility: 'private' as const,
       }));
     const r = await importEntries(items);
+    if (!r.error) {
+      const filmIds = items.map(i => i.filmId);
+      void markManyWatched(filmIds);
+    }
     setResult(r);
     setPhase('done');
   };

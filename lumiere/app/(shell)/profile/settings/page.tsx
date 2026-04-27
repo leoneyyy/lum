@@ -14,6 +14,7 @@ import {
   useMyProfile, saveMyProfile, setTopPicks, uploadMyAvatar, clearMyAvatar,
 } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
+import { useWatched } from '@/app/components/lib/watchedStore';
 import { useFilmsForEntries } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import { startEmailAuth, signOut } from '@/app/components/lib/auth';
@@ -67,6 +68,7 @@ export default function SettingsPage() {
         <div style={{ height: 28 }} />
         <Eyebrow num="01" label="instrument" t={t} style={{ marginBottom: 12 }} />
         <Stat t={t} label="logged" value={entries.length.toString().padStart(3, '0')} />
+        <WatchedStat t={t} />
         <Stat t={t} label="avg cry" value={avg.toString().padStart(3, '0')} />
         <Stat t={t} label="peak cry" value={max.toString().padStart(3, '0')} />
         <FollowingStat t={t} />
@@ -544,6 +546,12 @@ function FollowingStat({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
       }}>{value}</div>
     </Link>
   );
+}
+
+function WatchedStat({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
+  const { ids, state } = useWatched();
+  const value = state === 'loaded' ? ids.length.toString().padStart(3, '0') : '···';
+  return <Stat t={t} label="watched" value={value} />;
 }
 
 function ImportLink({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {

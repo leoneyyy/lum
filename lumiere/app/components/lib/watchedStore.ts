@@ -118,7 +118,7 @@ export async function unmarkWatched(filmId: string): Promise<string | null> {
 export async function markManyWatched(filmIds: readonly string[]): Promise<string | null> {
   const sb = getSupabase();
   if (!sb || !myUserId) return 'not signed in';
-  const fresh = filmIds.filter(id => !watched.has(id));
+  const fresh = Array.from(new Set(filmIds)).filter(id => !watched.has(id));
   if (fresh.length === 0) return null;
   const next = new Set(watched);
   for (const id of fresh) next.add(id);

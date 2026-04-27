@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType } from '@/app/components/lib/tokens';
 import type { Theme } from '@/app/components/lib/tokens';
-import { searchFilms, searchPeople, getPersonCredits } from '@/app/components/lib/api';
+import { searchFilms, searchPeople } from '@/app/components/lib/api';
 import { Poster } from '@/app/components/ui/Poster';
 import { Eyebrow } from '@/app/components/ui/Primitives';
 import type { Film } from '@/app/components/lib/types';
-import type { Person, PersonCredit } from '@/app/components/lib/tmdb';
+import type { Person } from '@/app/components/lib/tmdb';
 
 type Mode = 'all' | 'film' | 'series' | 'people';
 const MODES: { id: Mode; label: string }[] = [
@@ -194,118 +194,43 @@ function FilmRow({ film, t }: { film: Film; t: Theme }) {
 }
 
 function PersonRow({ person, t }: { person: Person; t: Theme }) {
-  const [open, setOpen] = React.useState(false);
-  const [credits, setCredits] = React.useState<PersonCredit[] | null>(null);
-  const [loadingCredits, setLoadingCredits] = React.useState(false);
-
-  const toggle = async () => {
-    const next = !open;
-    setOpen(next);
-    if (next && !credits) {
-      setLoadingCredits(true);
-      try {
-        const out = await getPersonCredits(person.id);
-        setCredits(out?.credits ?? []);
-      } finally {
-        setLoadingCredits(false);
-      }
-    }
-  };
-
   return (
-    <div style={{ borderBottom: `1px solid ${t.lineSoft}`, paddingBottom: 14 }}>
-      <button
-        onClick={toggle}
-        style={{
-          display: 'flex', gap: 14, alignItems: 'center', width: '100%',
-          background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
-          color: 'inherit', textAlign: 'left',
-        }}
-      >
-        {person.profileUrl ? (
-          <img src={person.profileUrl} alt="" style={{
-            width: 56, height: 56, borderRadius: '50%', objectFit: 'cover',
-            flexShrink: 0,
-          }} />
-        ) : (
-          <div style={{
-            width: 56, height: 56, borderRadius: '50%', background: t.surfaceHi,
-            flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: LumiereType.mono, fontSize: 12, color: t.muted,
-          }}>{person.name.slice(0, 2).toUpperCase()}</div>
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontFamily: LumiereType.display, fontSize: 20, lineHeight: 1.05,
-            color: t.cream, letterSpacing: -0.4,
-          }}>{person.name}</div>
-          <div style={{
-            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
-            textTransform: 'uppercase', color: t.muted, marginTop: 4,
-          }}>
-            {person.knownForDept || 'person'}
-            {person.knownFor.length > 0 && ` · known for: ${person.knownFor.slice(0, 3).map(k => k.title).join(' · ')}`}
-          </div>
-        </div>
+    <Link
+      href={`/people/${encodeURIComponent(person.id)}`}
+      style={{
+        display: 'flex', gap: 14, alignItems: 'center', textDecoration: 'none',
+        color: 'inherit', borderBottom: `1px solid ${t.lineSoft}`, paddingBottom: 14,
+      }}
+    >
+      {person.profileUrl ? (
+        <img src={person.profileUrl} alt="" style={{
+          width: 56, height: 56, borderRadius: '50%', objectFit: 'cover',
+          flexShrink: 0,
+        }} />
+      ) : (
         <div style={{
-          fontFamily: LumiereType.mono, fontSize: 14, color: t.creamDim,
-          marginLeft: 8, transform: open ? 'rotate(90deg)' : 'none',
-          transition: 'transform 0.15s',
-        }}>›</div>
-      </button>
-
-      {open && (
-        <div style={{ marginTop: 14, marginLeft: 70 }}>
-          {loadingCredits && (
-            <div style={{
-              fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
-              textTransform: 'uppercase', color: t.muted,
-            }}>loading filmography…</div>
-          )}
-          {credits && credits.length === 0 && (
-            <div style={{
-              fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
-              color: t.creamDim,
-            }}>no credits found.</div>
-          )}
-          {credits && credits.length > 0 && (
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
-              gap: 8,
-            }}>
-              {credits.slice(0, 30).map(c => (
-                <Link
-                  key={c.id}
-                  href={`/films/${encodeURIComponent(c.id)}`}
-                  style={{
-                    display: 'block', textDecoration: 'none', color: 'inherit',
-                  }}
-                  title={`${c.title} (${c.year || '—'})${c.character ? ` · ${c.character}` : c.job ? ` · ${c.job}` : ''}`}
-                >
-                  {c.posterUrl ? (
-                    <img src={c.posterUrl} alt="" style={{
-                      width: '100%', aspectRatio: '2/3', objectFit: 'cover',
-                      background: t.surfaceHi, display: 'block',
-                    }} />
-                  ) : (
-                    <div style={{
-                      width: '100%', aspectRatio: '2/3', background: t.surfaceHi,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: LumiereType.mono, fontSize: 9, color: t.muted,
-                      padding: 4, textAlign: 'center', lineHeight: 1.2,
-                    }}>{c.title.slice(0, 24)}</div>
-                  )}
-                  <div style={{
-                    fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1,
-                    color: t.muted, marginTop: 4, overflow: 'hidden',
-                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{c.year || '—'}</div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+          width: 56, height: 56, borderRadius: '50%', background: t.surfaceHi,
+          flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: LumiereType.mono, fontSize: 12, color: t.muted,
+        }}>{person.name.slice(0, 2).toUpperCase()}</div>
       )}
-    </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: LumiereType.display, fontSize: 20, lineHeight: 1.05,
+          color: t.cream, letterSpacing: -0.4,
+        }}>{person.name}</div>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
+          textTransform: 'uppercase', color: t.muted, marginTop: 4,
+        }}>
+          {person.knownForDept || 'person'}
+          {person.knownFor.length > 0 && ` · known for: ${person.knownFor.slice(0, 3).map(k => k.title).join(' · ')}`}
+        </div>
+      </div>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 14, color: t.creamDim,
+        marginLeft: 8,
+      }}>›</div>
+    </Link>
   );
 }

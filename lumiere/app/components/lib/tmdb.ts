@@ -65,6 +65,7 @@ export async function getMovie(id: number): Promise<Film> {
   film.runtime = j.runtime;
   const director = (j.credits?.crew || []).find((c: any) => c.job === 'Director');
   film.dir = director?.name;
+  film.dirId = director?.id;
   film.tags = (j.genres || []).map((g: any) => g.name.toLowerCase());
   return film;
 }

@@ -12,6 +12,7 @@ export interface Film {
   episode?: number;
   epTitle?: string;
   dir?: string;
+  dirId?: number;
   runtime?: number;
   posterUrl?: string | null;
   backdropUrl?: string | null;

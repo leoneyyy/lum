@@ -174,10 +174,18 @@ export default function FilmDetailPage() {
             }}>{film.title}</div>
             <MetaRow t={t} items={[
               film.year ? String(film.year) : null,
-              film.dir ? `dir. ${film.dir}` : null,
+              film.dir ? (
+                film.dirId ? (
+                  <Link
+                    key="dir"
+                    href={`/people/tmdb_p_${film.dirId}`}
+                    style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 3 }}
+                  >dir. {film.dir}</Link>
+                ) : `dir. ${film.dir}`
+              ) : null,
               film.runtime ? `${film.runtime}m` : null,
               film.kind,
-            ].filter(Boolean) as string[]} />
+            ].filter(Boolean) as React.ReactNode[]} />
             {film.tags?.length ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
                 {film.tags.slice(0, 6).map(tag => (
@@ -369,7 +377,7 @@ export default function FilmDetailPage() {
   );
 }
 
-function MetaRow({ t, items }: { t: ReturnType<typeof useTweaks>['theme']; items: string[] }) {
+function MetaRow({ t, items }: { t: ReturnType<typeof useTweaks>['theme']; items: React.ReactNode[] }) {
   return (
     <div style={{
       fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,

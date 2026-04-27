@@ -16,6 +16,7 @@ import {
 } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
 import { useWatched } from '@/app/components/lib/watchedStore';
+import { useWatchlist } from '@/app/components/lib/watchlistStore';
 import { useFilmsForEntries } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import { startEmailAuth, signOut } from '@/app/components/lib/auth';
@@ -70,6 +71,7 @@ export default function SettingsPage() {
         <Eyebrow num="01" label="instrument" t={t} style={{ marginBottom: 12 }} />
         <Stat t={t} label="logged" value={entries.length.toString().padStart(3, '0')} />
         <WatchedStat t={t} />
+        <WatchlistStat t={t} />
         <Stat t={t} label="avg cry" value={avg.toString().padStart(3, '0')} />
         <Stat t={t} label="peak cry" value={max.toString().padStart(3, '0')} />
         <FollowingStat t={t} />
@@ -556,7 +558,43 @@ function FollowingStat({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
 function WatchedStat({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
   const { ids, state } = useWatched();
   const value = state === 'loaded' ? ids.length.toString().padStart(3, '0') : '···';
-  return <Stat t={t} label="watched" value={value} />;
+  return (
+    <Link href="/profile/watched" style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+      padding: '10px 0', borderBottom: `1px solid ${t.lineSoft}`,
+      textDecoration: 'none', color: 'inherit',
+    }}>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+        textTransform: 'uppercase', color: t.muted,
+      }}>watched →</div>
+      <div style={{
+        fontFamily: LumiereType.display, fontSize: 28, lineHeight: 1,
+        color: t.cream, letterSpacing: -0.6,
+      }}>{value}</div>
+    </Link>
+  );
+}
+
+function WatchlistStat({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
+  const { ids, state } = useWatchlist();
+  const value = state === 'loaded' ? ids.length.toString().padStart(3, '0') : '···';
+  return (
+    <Link href="/profile/watchlist" style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+      padding: '10px 0', borderBottom: `1px solid ${t.lineSoft}`,
+      textDecoration: 'none', color: 'inherit',
+    }}>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+        textTransform: 'uppercase', color: t.muted,
+      }}>watchlist →</div>
+      <div style={{
+        fontFamily: LumiereType.display, fontSize: 28, lineHeight: 1,
+        color: t.cream, letterSpacing: -0.6,
+      }}>{value}</div>
+    </Link>
+  );
 }
 
 function ImportLink({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {

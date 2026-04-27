@@ -22,6 +22,7 @@ import { useProfiles } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
 import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
 import { useIsWatched, markWatched, unmarkWatched } from '@/app/components/lib/watchedStore';
+import { useIsOnWatchlist, addToWatchlist, removeFromWatchlist } from '@/app/components/lib/watchlistStore';
 
 export default function FilmDetailPage() {
   const params = useParams<{ id: string }>();
@@ -208,7 +209,10 @@ export default function FilmDetailPage() {
               fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 3,
               textTransform: 'uppercase',
             }}>log this →</button>
-            <WatchedToggle filmId={id} t={t} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <WatchedToggle filmId={id} t={t} />
+              <WatchlistToggle filmId={id} t={t} />
+            </div>
           </div>
         ) : (
           <div style={{
@@ -677,7 +681,7 @@ function WatchedToggle({ filmId, t }: { filmId: string; t: ReturnType<typeof use
   return (
     <button onClick={onClick} disabled={busy} style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-      width: '100%', padding: '12px 0',
+      flex: 1, padding: '12px 0',
       background: 'transparent',
       color: isWatched ? t.signal : t.creamDim,
       border: `1px solid ${isWatched ? t.signal : t.line}`,
@@ -689,6 +693,35 @@ function WatchedToggle({ filmId, t }: { filmId: string; t: ReturnType<typeof use
         {isWatched ? '✓' : '·'}
       </span>
       {isWatched ? 'watched' : 'mark watched'}
+    </button>
+  );
+}
+
+function WatchlistToggle({ filmId, t }: { filmId: string; t: ReturnType<typeof useTweaks>['theme'] }) {
+  const onList = useIsOnWatchlist(filmId);
+  const [busy, setBusy] = React.useState(false);
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    if (onList) await removeFromWatchlist(filmId);
+    else await addToWatchlist(filmId);
+    setBusy(false);
+  };
+  return (
+    <button onClick={onClick} disabled={busy} style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      flex: 1, padding: '12px 0',
+      background: 'transparent',
+      color: onList ? t.accent : t.creamDim,
+      border: `1px solid ${onList ? t.accent : t.line}`,
+      cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+      fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+      textTransform: 'uppercase',
+    }}>
+      <span style={{ display: 'inline-block', width: 12, textAlign: 'center' }}>
+        {onList ? '★' : '+'}
+      </span>
+      {onList ? 'in watchlist' : 'watchlist'}
     </button>
   );
 }

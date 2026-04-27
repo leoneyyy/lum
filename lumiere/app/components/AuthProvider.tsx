@@ -8,6 +8,7 @@ import { setReactionUser } from '@/app/components/lib/reactionStore';
 import { setFeedUser } from '@/app/components/lib/feedStore';
 import { setOverridesUser } from '@/app/components/lib/filmOverrides';
 import { setWatchedUser } from '@/app/components/lib/watchedStore';
+import { setWatchlistUser } from '@/app/components/lib/watchlistStore';
 
 export type AuthStatus = 'init' | 'anon' | 'user' | 'disabled' | 'error';
 
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFeedUser(null);
       setOverridesUser(null);
       setWatchedUser(null);
+      setWatchlistUser(null);
       return;
     }
 
@@ -60,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFeedUser(userId);
       setOverridesUser(userId);
       setWatchedUser(userId);
+      setWatchlistUser(userId);
       setState({
         status: error ? 'error' : userId ? (isAnon ? 'anon' : 'user') : 'init',
         userId,

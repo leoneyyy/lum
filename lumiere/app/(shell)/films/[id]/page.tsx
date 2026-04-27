@@ -172,7 +172,19 @@ export default function FilmDetailPage() {
             <div style={{
               fontFamily: LumiereType.display, fontSize: 32, lineHeight: 1,
               color: t.cream, letterSpacing: -0.8, marginBottom: 10,
-            }}>{film.title}</div>
+            }}>
+              {film.title}
+              {film.season != null && (
+                <div style={{
+                  fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 18,
+                  color: t.creamDim, lineHeight: 1.2, marginTop: 4,
+                }}>
+                  {film.episode != null
+                    ? `s${String(film.season).padStart(2, '0')}e${String(film.episode).padStart(2, '0')}${film.epTitle ? ` · ${film.epTitle}` : ''}`
+                    : (film.epTitle || `season ${film.season}`)}
+                </div>
+              )}
+            </div>
             <MetaRow t={t} items={[
               film.year ? String(film.year) : null,
               film.dir ? (
@@ -503,6 +515,21 @@ function EpisodesSection({
           );
         })}
       </div>
+
+      {data.selected != null && (
+        <Link
+          href={`/films/${encodeURIComponent(`${seriesId}_s${data.selected}`)}`}
+          style={{
+            display: 'block', padding: '10px 12px', marginBottom: 14,
+            background: t.surface, border: `1px solid ${t.line}`,
+            textDecoration: 'none', color: 'inherit',
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+            textTransform: 'uppercase',
+          }}
+        >
+          ◇ rate season {data.selected === 0 ? 'specials' : data.selected} →
+        </Link>
+      )}
 
       {!eps ? (
         <div style={{

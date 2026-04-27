@@ -80,12 +80,15 @@ interface TmdbImage { file_path?: string }
 export async function getFilmImages(id: string): Promise<ImageCatalog> {
   const mMovie = id.match(/^tmdb_m_(\d+)$/);
   const mEp = id.match(/^tmdb_t_(\d+)_s(\d+)_e(\d+)$/);
+  const mSeason = id.match(/^tmdb_t_(\d+)_s(\d+)$/);
   const mTv = id.match(/^tmdb_t_(\d+)$/);
   let url: string;
   if (mMovie) {
     url = `${TMDB_BASE}/movie/${mMovie[1]}/images?include_image_language=en,null`;
   } else if (mEp) {
     url = `${TMDB_BASE}/tv/${mEp[1]}/season/${mEp[2]}/episode/${mEp[3]}/images`;
+  } else if (mSeason) {
+    url = `${TMDB_BASE}/tv/${mSeason[1]}/season/${mSeason[2]}/images?include_image_language=en,null`;
   } else if (mTv) {
     url = `${TMDB_BASE}/tv/${mTv[1]}/images?include_image_language=en,null`;
   } else {
@@ -164,6 +167,35 @@ export async function getSeasonEpisodes(tvId: number, season: number): Promise<E
     stillUrl: posterUrl(e.still_path as string | null | undefined, 'w500'),
     overview: String(e.overview ?? ''),
   }));
+}
+
+export async function getSeason(tvId: number, season: number): Promise<Film> {
+  const tvUrl = `${TMDB_BASE}/tv/${tvId}`;
+  const sUrl = `${TMDB_BASE}/tv/${tvId}/season/${season}`;
+  const [tvR, sR] = await Promise.all([
+    fetch(tvUrl, { headers: authHeaders(), next: { revalidate: 3600 } }),
+    fetch(sUrl, { headers: authHeaders(), next: { revalidate: 3600 } }),
+  ]);
+  if (!tvR.ok || !sR.ok) throw new Error('TMDB season failed');
+  const tv = await tvR.json();
+  const s = await sR.json();
+  return {
+    id: `tmdb_t_${tvId}_s${season}`,
+    tmdbId: tvId,
+    title: tv.name,
+    year: +(s.air_date || tv.first_air_date || '').slice(0, 4) || 0,
+    kind: 'series',
+    season,
+    epTitle: s.name || `Season ${season}`,
+    posterUrl: s.poster_path
+      ? `${IMG_BASE}/w500${s.poster_path}`
+      : posterUrl(tv.poster_path),
+    backdropUrl: posterUrl(tv.backdrop_path, 'original'),
+    synopsis: s.overview || tv.overview,
+    tags: (tv.genres || []).map((g: any) => g.name.toLowerCase()),
+    poster: '#3a3a4a',
+    posterAccent: '#ebe6d8',
+  };
 }
 
 export async function getEpisode(tvId: number, season: number, episode: number): Promise<Film> {

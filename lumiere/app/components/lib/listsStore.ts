@@ -101,28 +101,40 @@ export function setListsUser(userId: string | null) {
   if (userId) void load();
 }
 
-const EMPTY_VIEW = { lists: [] as ListMeta[], state: 'idle' as LoadState, version: 0 };
+type View = { lists: ListMeta[]; state: LoadState };
+const EMPTY_VIEW: View = { lists: [] as ListMeta[], state: 'idle' };
 
-function snapshot() {
-  return { lists, state, version };
+let cachedView: View = EMPTY_VIEW;
+let cachedViewVersion = -1;
+
+function snapshot(): View {
+  if (cachedViewVersion !== version) {
+    cachedViewVersion = version;
+    cachedView = { lists, state };
+  }
+  return cachedView;
 }
-function serverSnapshot() { return EMPTY_VIEW; }
+function serverSnapshot(): View { return EMPTY_VIEW; }
 function subscribe(cb: () => void): () => void {
   listeners.add(cb);
   return () => { listeners.delete(cb); };
 }
 
-export function useLists(): { lists: ListMeta[]; state: LoadState } {
-  const v = React.useSyncExternalStore(subscribe, snapshot, serverSnapshot);
-  return { lists: v.lists, state: v.state };
+export function useLists(): View {
+  return React.useSyncExternalStore(subscribe, snapshot, serverSnapshot);
 }
+
+const membershipCache = new Map<string, { v: number; set: Set<string> }>();
 
 export function useListMembership(filmId: string): Set<string> {
   React.useSyncExternalStore(subscribe, snapshot, serverSnapshot);
+  const cached = membershipCache.get(filmId);
+  if (cached && cached.v === version) return cached.set;
   const out = new Set<string>();
   for (const [listId, films] of memberships) {
     if (films.has(filmId)) out.add(listId);
   }
+  membershipCache.set(filmId, { v: version, set: out });
   return out;
 }
 

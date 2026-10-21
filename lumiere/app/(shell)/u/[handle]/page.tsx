@@ -85,7 +85,7 @@ export default function UserPage() {
           borderBottom: `1px solid ${t.line}`,
         }}>
           <img src={heroBackdrop} alt="" style={{
-            width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%',
+            width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center',
             filter: 'brightness(0.8)',
           }} />
           <div style={{

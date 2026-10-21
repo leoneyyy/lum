@@ -119,16 +119,18 @@ export default function FilmDetailPage() {
     <div>
       {film.backdropUrl && (
         <div style={{
-          position: 'relative', height: 220, overflow: 'hidden',
+          // TMDB backdrops are 16:9 — matching the box shows the whole frame
+          // at any width instead of cropping it to a thin strip on laptops.
+          position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden',
           borderBottom: `1px solid ${t.line}`,
         }}>
           <img src={film.backdropUrl} alt="" style={{
-            width: '100%', height: '100%', objectFit: 'cover',
-            filter: 'brightness(0.55) saturate(0.85)',
+            display: 'block', width: '100%', height: '100%', objectFit: 'cover',
+            filter: 'brightness(0.85)',
           }} />
           <div style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(180deg, transparent 40%, ${t.bg})`,
+            background: `linear-gradient(180deg, transparent 70%, ${t.bg})`,
           }} />
           <button onClick={() => setPicker('backdrop')} style={{
             position: 'absolute', top: 12, right: 12,
@@ -173,7 +175,7 @@ export default function FilmDetailPage() {
               fontFamily: LumiereType.display, fontSize: 32, lineHeight: 1,
               color: t.cream, letterSpacing: -0.8, marginBottom: 10,
             }}>
-              {film.title}
+              <TitleMark film={film} />
               {film.season != null && (
                 <div style={{
                   fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 18,
@@ -391,12 +393,38 @@ export default function FilmDetailPage() {
   );
 }
 
+// The film's own title treatment when TMDB has one; plain text otherwise
+// (or if the image fails to load).
+function TitleMark({ film }: { film: Film }) {
+  const [failed, setFailed] = React.useState(false);
+  if (!film.logoUrl || failed) return <>{film.title}</>;
+  return (
+    <img
+      src={film.logoUrl}
+      alt={film.title}
+      onError={() => setFailed(true)}
+      style={{
+        display: 'block', maxWidth: '100%', maxHeight: 110,
+        objectFit: 'contain', objectPosition: 'left center',
+        filter: 'drop-shadow(0 2px 10px rgba(0,0,0,0.55))',
+      }}
+    />
+  );
+}
+
 function MetaRow({ t, items }: { t: ReturnType<typeof useTweaks>['theme']; items: React.ReactNode[] }) {
   return (
     <div style={{
       fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
       textTransform: 'uppercase', color: t.muted,
-    }}>{items.join(' · ')}</div>
+    }}>
+      {items.map((item, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && ' · '}
+          {item}
+        </React.Fragment>
+      ))}
+    </div>
   );
 }
 

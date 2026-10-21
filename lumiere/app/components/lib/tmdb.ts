@@ -56,13 +56,26 @@ export async function searchMulti(query: string): Promise<Film[]> {
     .map((x: any) => x.media_type === 'tv' ? mapTv(x) : mapMovie(x));
 }
 
+// Title-treatment logo (the stylised name graphic). English first, then
+// language-neutral, then whatever TMDB has.
+function pickLogo(images: { logos?: { file_path?: string; iso_639_1?: string | null }[] } | undefined): string | null {
+  const logos = (images?.logos || []).filter(l => l.file_path);
+  const best = logos.find(l => l.iso_639_1 === 'en')
+    ?? logos.find(l => !l.iso_639_1)
+    ?? logos[0];
+  return best?.file_path ? `${IMG_BASE}/w500${best.file_path}` : null;
+}
+
+const WITH_IMAGES = 'include_image_language=en,null';
+
 export async function getMovie(id: number): Promise<Film> {
-  const url = `${TMDB_BASE}/movie/${id}?append_to_response=credits`;
+  const url = `${TMDB_BASE}/movie/${id}?append_to_response=credits,images&${WITH_IMAGES}`;
   const r = await fetch(url, { headers: authHeaders(), next: { revalidate: 3600 } });
   if (!r.ok) throw new Error(`TMDB movie ${id} failed: ${r.status}`);
   const j = await r.json();
   const film = mapMovie(j);
   film.runtime = j.runtime;
+  film.logoUrl = pickLogo(j.images);
   const director = (j.credits?.crew || []).find((c: any) => c.job === 'Director');
   film.dir = director?.name;
   film.dirId = director?.id;
@@ -107,11 +120,12 @@ export async function getFilmImages(id: string): Promise<ImageCatalog> {
 }
 
 export async function getSeries(tvId: number): Promise<Film> {
-  const url = `${TMDB_BASE}/tv/${tvId}?append_to_response=credits`;
+  const url = `${TMDB_BASE}/tv/${tvId}?append_to_response=credits,images&${WITH_IMAGES}`;
   const r = await fetch(url, { headers: authHeaders(), next: { revalidate: 3600 } });
   if (!r.ok) throw new Error(`TMDB series ${tvId} failed: ${r.status}`);
   const j = await r.json();
   const film = mapTv(j);
+  film.logoUrl = pickLogo(j.images);
   const creator = (j.created_by || [])[0];
   film.dir = creator?.name;
   film.runtime = Array.isArray(j.episode_run_time) ? j.episode_run_time[0] : undefined;
@@ -170,7 +184,7 @@ export async function getSeasonEpisodes(tvId: number, season: number): Promise<E
 }
 
 export async function getSeason(tvId: number, season: number): Promise<Film> {
-  const tvUrl = `${TMDB_BASE}/tv/${tvId}`;
+  const tvUrl = `${TMDB_BASE}/tv/${tvId}?append_to_response=images&${WITH_IMAGES}`;
   const sUrl = `${TMDB_BASE}/tv/${tvId}/season/${season}`;
   const [tvR, sR] = await Promise.all([
     fetch(tvUrl, { headers: authHeaders(), next: { revalidate: 3600 } }),
@@ -191,6 +205,7 @@ export async function getSeason(tvId: number, season: number): Promise<Film> {
       ? `${IMG_BASE}/w500${s.poster_path}`
       : posterUrl(tv.poster_path),
     backdropUrl: posterUrl(tv.backdrop_path, 'original'),
+    logoUrl: pickLogo(tv.images),
     synopsis: s.overview || tv.overview,
     tags: (tv.genres || []).map((g: any) => g.name.toLowerCase()),
     poster: '#3a3a4a',
@@ -199,7 +214,7 @@ export async function getSeason(tvId: number, season: number): Promise<Film> {
 }
 
 export async function getEpisode(tvId: number, season: number, episode: number): Promise<Film> {
-  const tvUrl = `${TMDB_BASE}/tv/${tvId}`;
+  const tvUrl = `${TMDB_BASE}/tv/${tvId}?append_to_response=images&${WITH_IMAGES}`;
   const epUrl = `${TMDB_BASE}/tv/${tvId}/season/${season}/episode/${episode}`;
   const [tvR, epR] = await Promise.all([
     fetch(tvUrl, { headers: authHeaders(), next: { revalidate: 3600 } }),
@@ -218,6 +233,8 @@ export async function getEpisode(tvId: number, season: number, episode: number):
     epTitle: ep.name,
     runtime: ep.runtime,
     posterUrl: ep.still_path ? `${IMG_BASE}/w500${ep.still_path}` : posterUrl(tv.poster_path),
+    backdropUrl: posterUrl(tv.backdrop_path, 'original'),
+    logoUrl: pickLogo(tv.images),
     synopsis: ep.overview || tv.overview,
     tags: (tv.genres || []).map((g: any) => g.name.toLowerCase()),
     poster: '#3a3a4a',

@@ -16,6 +16,7 @@ export interface Film {
   runtime?: number;
   posterUrl?: string | null;
   backdropUrl?: string | null;
+  logoUrl?: string | null;  // stylised title-treatment graphic from TMDB
   synopsis?: string;
   tags?: string[];
   // local-only rendering helpers (kept for backwards compat with prototype Poster)

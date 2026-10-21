@@ -5,17 +5,19 @@ import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType } from '@/app/components/lib/tokens';
 import type { Theme } from '@/app/components/lib/tokens';
 import { searchFilms, searchPeople } from '@/app/components/lib/api';
+import { searchProfiles } from '@/app/components/lib/profileStore';
 import { Poster } from '@/app/components/ui/Poster';
-import { Eyebrow } from '@/app/components/ui/Primitives';
-import type { Film } from '@/app/components/lib/types';
+import { Avatar, avatarFor, Eyebrow } from '@/app/components/ui/Primitives';
+import type { Film, Profile } from '@/app/components/lib/types';
 import type { Person } from '@/app/components/lib/tmdb';
 
-type Mode = 'all' | 'film' | 'series' | 'people';
+type Mode = 'all' | 'film' | 'series' | 'people' | 'friends';
 const MODES: { id: Mode; label: string }[] = [
   { id: 'all', label: 'all' },
   { id: 'film', label: 'films' },
   { id: 'series', label: 'series' },
   { id: 'people', label: 'people' },
+  { id: 'friends', label: 'friends' },
 ];
 
 export default function SearchPage() {
@@ -24,27 +26,31 @@ export default function SearchPage() {
   const [mode, setMode] = React.useState<Mode>('all');
   const [films, setFilms] = React.useState<Film[]>([]);
   const [people, setPeople] = React.useState<Person[]>([]);
+  const [profiles, setProfiles] = React.useState<Profile[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const term = q.trim();
-    if (!term) { setFilms([]); setPeople([]); return; }
+    if (!term) { setFilms([]); setPeople([]); setProfiles([]); return; }
     let cancelled = false;
     const id = setTimeout(async () => {
       if (cancelled) return;
       setLoading(true);
       setErr(null);
       try {
-        const needFilms = mode !== 'people';
+        const needFilms = mode === 'all' || mode === 'film' || mode === 'series';
         const needPeople = mode === 'all' || mode === 'people';
-        const [f, p] = await Promise.all([
+        const needProfiles = mode === 'all' || mode === 'friends';
+        const [f, p, pr] = await Promise.all([
           needFilms ? searchFilms(term) : Promise.resolve([] as Film[]),
           needPeople ? searchPeople(term) : Promise.resolve([] as Person[]),
+          needProfiles ? searchProfiles(term.replace(/^@/, '')) : Promise.resolve([] as Profile[]),
         ]);
         if (cancelled) return;
         setFilms(f);
         setPeople(p);
+        setProfiles(pr);
       } catch (e: unknown) {
         if (!cancelled) setErr(e instanceof Error ? e.message : 'search failed');
       } finally {
@@ -62,7 +68,10 @@ export default function SearchPage() {
   }, [films, mode]);
 
   const showPeople = mode === 'all' || mode === 'people';
-  const totalCount = filteredFilms.length + (showPeople ? people.length : 0);
+  const showProfiles = mode === 'all' || mode === 'friends';
+  const totalCount = filteredFilms.length
+    + (showPeople ? people.length : 0)
+    + (showProfiles ? profiles.length : 0);
 
   return (
     <div>
@@ -75,7 +84,7 @@ export default function SearchPage() {
           autoFocus
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="title, actor, director…"
+          placeholder={mode === 'friends' ? '@handle…' : 'title, actor, director, @friend…'}
           style={{
             width: '100%', padding: '10px 0', border: 'none', outline: 'none',
             borderBottom: `1px solid ${t.line}`, background: 'transparent',
@@ -120,6 +129,15 @@ export default function SearchPage() {
             fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 15,
             color: t.creamDim, padding: '20px 0',
           }}>nothing found. try a different angle.</div>
+        )}
+
+        {showProfiles && profiles.length > 0 && (
+          <>
+            <Eyebrow num="◉" label="friends on lumière" t={t} style={{ marginBottom: 14 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 26 }}>
+              {profiles.map(p => <ProfileRow key={p.id} profile={p} t={t} />)}
+            </div>
+          </>
         )}
 
         {showPeople && people.length > 0 && (
@@ -226,6 +244,40 @@ function PersonRow({ person, t }: { person: Person; t: Theme }) {
           {person.knownForDept || 'person'}
           {person.knownFor.length > 0 && ` · known for: ${person.knownFor.slice(0, 3).map(k => k.title).join(' · ')}`}
         </div>
+      </div>
+      <div style={{
+        fontFamily: LumiereType.mono, fontSize: 14, color: t.creamDim,
+        marginLeft: 8,
+      }}>›</div>
+    </Link>
+  );
+}
+
+function ProfileRow({ profile, t }: { profile: Profile; t: Theme }) {
+  const avatar = avatarFor(profile.id, profile.handle, profile.avatarUrl);
+  return (
+    <Link
+      href={`/u/${encodeURIComponent(profile.handle)}`}
+      style={{
+        display: 'flex', gap: 12, alignItems: 'center',
+        padding: '8px 0', borderBottom: `1px solid ${t.lineSoft}`,
+        textDecoration: 'none', color: 'inherit',
+      }}
+    >
+      <Avatar friend={avatar} size={44} t={t} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 12, letterSpacing: 1.2,
+          color: t.cream,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>@{profile.handle}</div>
+        {profile.name && (
+          <div style={{
+            fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
+            color: t.creamDim, marginTop: 2,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{profile.name}</div>
+        )}
       </div>
       <div style={{
         fontFamily: LumiereType.mono, fontSize: 14, color: t.creamDim,

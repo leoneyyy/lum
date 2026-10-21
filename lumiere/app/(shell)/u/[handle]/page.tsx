@@ -81,16 +81,16 @@ export default function UserPage() {
     <div>
       {heroBackdrop && (
         <div style={{
-          position: 'relative', height: 220, overflow: 'hidden',
+          position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden',
           borderBottom: `1px solid ${t.line}`,
         }}>
           <img src={heroBackdrop} alt="" style={{
             width: '100%', height: '100%', objectFit: 'cover',
-            filter: 'brightness(0.5) saturate(0.85)',
+            filter: 'brightness(0.8)',
           }} />
           <div style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(180deg, transparent 30%, ${t.bg})`,
+            background: `linear-gradient(180deg, transparent 65%, ${t.bg})`,
           }} />
           <button onClick={() => router.back()} style={{
             position: 'absolute', top: 14, left: 18,

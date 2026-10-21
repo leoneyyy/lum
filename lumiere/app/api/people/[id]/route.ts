@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/app/api/_lib/requireUser';
 import { getPersonCredits } from '@/app/components/lib/tmdb';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const denied = await requireUser(req);
+  if (denied) return denied;
   const { id } = await params;
   const m = id.match(/^tmdb_p_(\d+)$/);
   if (!m) return NextResponse.json({ error: 'bad id' }, { status: 400 });

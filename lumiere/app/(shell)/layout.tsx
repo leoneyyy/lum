@@ -9,8 +9,13 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
     <div style={{
       position: 'relative', minHeight: '100vh',
       background: t.bg, color: t.cream,
+      // installed on a phone the page draws under the status bar
+      paddingTop: 'env(safe-area-inset-top)',
     }}>
-      <div style={{ maxWidth: 720, margin: '0 auto', paddingBottom: 100 }}>{children}</div>
+      <div style={{
+        maxWidth: 720, margin: '0 auto',
+        paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
+      }}>{children}</div>
       <BottomNav t={t} />
       <Splash />
     </div>

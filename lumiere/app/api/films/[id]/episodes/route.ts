@@ -1,11 +1,14 @@
 // app/api/films/[id]/episodes/route.ts — list seasons + episodes for a series id
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/app/api/_lib/requireUser';
 import { getSeasons, getSeasonEpisodes } from '@/app/components/lib/tmdb';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const denied = await requireUser(req);
+  if (denied) return denied;
   const { id } = await params;
   const mTv = id.match(/^tmdb_t_(\d+)(?:_s(\d+)_e(\d+))?$/);
   if (!mTv) {

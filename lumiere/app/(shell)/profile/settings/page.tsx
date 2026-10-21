@@ -11,7 +11,7 @@ import type { Film, MediaKind, Profile } from '@/app/components/lib/types';
 import { useLog } from '@/app/components/lib/logStore';
 import { useAuth } from '@/app/components/AuthProvider';
 import {
-  useMyProfile, saveMyProfile, setTopPicks, setPublicTheme,
+  useMyProfile, saveMyProfile, setTopPicks, setPublicTheme, setShowWatched,
   uploadMyAvatar, clearMyAvatar,
 } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
@@ -110,8 +110,10 @@ export default function SettingsPage() {
         </div>
 
         <div style={{ height: 28 }} />
-        <Eyebrow num="04" label="public theme" t={t} style={{ marginBottom: 12 }} />
+        <Eyebrow num="04" label="public page" t={t} style={{ marginBottom: 12 }} />
         <PublicThemeBlock t={t} />
+        <div style={{ height: 14 }} />
+        <ShowWatchedToggle t={t} />
 
         <div style={{ height: 28 }} />
         <Eyebrow num="05" label="cry style" t={t} style={{ marginBottom: 12 }} />
@@ -930,6 +932,54 @@ function PublicThemeBlock({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
         <div style={{
           marginTop: 8,
           fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
+          textTransform: 'uppercase', color: t.danger,
+        }}>error · {err}</div>
+      )}
+    </div>
+  );
+}
+
+function ShowWatchedToggle({ t }: { t: ReturnType<typeof useTweaks>['theme'] }) {
+  const { profile } = useMyProfile();
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+  if (!profile) return null;
+
+  const on = profile.showWatched;
+  const toggle = async () => {
+    setBusy(true);
+    setErr(null);
+    const e = await setShowWatched(!on);
+    setBusy(false);
+    if (e) setErr(e);
+  };
+
+  return (
+    <div>
+      <button onClick={() => void toggle()} disabled={busy} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        width: '100%', padding: '12px 14px', cursor: busy ? 'default' : 'pointer',
+        background: on ? t.surface : 'transparent', color: 'inherit', textAlign: 'left',
+        border: `1px solid ${on ? t.signal : t.line}`, opacity: busy ? 0.6 : 1,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+            textTransform: 'uppercase', color: t.cream,
+          }}>show watched on profile</div>
+          <div style={{
+            fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 13,
+            color: t.creamDim, marginTop: 4,
+          }}>{on ? 'anyone with your link sees what you\'ve watched.' : 'only you see your watched films.'}</div>
+        </div>
+        <div style={{
+          fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 1.6,
+          textTransform: 'uppercase', color: on ? t.signal : t.muted, flexShrink: 0,
+        }}>{on ? '✓ on' : 'off'}</div>
+      </button>
+      {err && (
+        <div style={{
+          marginTop: 8, fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.4,
           textTransform: 'uppercase', color: t.danger,
         }}>error · {err}</div>
       )}

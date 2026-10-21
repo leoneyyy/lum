@@ -245,3 +245,33 @@ export async function fetchListWithFilms(id: string): Promise<ListWithFilms | nu
     filmIds: (lf ?? []).map((r: { film_id: string }) => r.film_id),
   };
 }
+
+export interface PublicListSummary extends ListMeta {
+  filmCount: number;
+  coverFilmIds: string[];  // first few films, for the cover strip
+}
+
+// Someone's public lists, for their profile page. RLS already limits other
+// people's lists to visibility = 'public'; the filter makes it explicit and
+// keeps your own private lists off your public page too.
+export async function fetchPublicListsByUser(userId: string): Promise<PublicListSummary[]> {
+  const sb = getSupabase();
+  if (!sb || !userId) return [];
+  const { data, error } = await sb
+    .from('lists')
+    .select('id,user_id,name,description,visibility,created_at,updated_at,covers:list_films(film_id),total:list_films(count)')
+    .eq('user_id', userId)
+    .eq('visibility', 'public')
+    .order('updated_at', { ascending: false })
+    .limit(4, { referencedTable: 'covers' });
+  if (error) {
+    console.error('[lumiere] public lists fetch failed', error.message);
+    return [];
+  }
+  type WithFilms = Row & { covers: { film_id: string }[] | null; total: { count: number }[] | null };
+  return ((data ?? []) as WithFilms[]).map(r => ({
+    ...rowToMeta(r),
+    filmCount: r.total?.[0]?.count ?? 0,
+    coverFilmIds: (r.covers ?? []).map(c => c.film_id),
+  }));
+}

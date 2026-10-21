@@ -136,3 +136,21 @@ export async function markManyWatched(filmIds: readonly string[]): Promise<strin
   }
   return null;
 }
+
+// Someone else's watched films, newest first. Only returns rows when they've
+// turned on show_watched (enforced by RLS); otherwise an empty result.
+export async function fetchWatchedByUser(userId: string, limit = 24): Promise<{ ids: string[]; total: number }> {
+  const sb = getSupabase();
+  if (!sb || !userId) return { ids: [], total: 0 };
+  const { data, count, error } = await sb
+    .from('watched')
+    .select('film_id', { count: 'exact' })
+    .eq('user_id', userId)
+    .order('watched_at', { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.error('[lumiere] watched fetch failed', error.message);
+    return { ids: [], total: 0 };
+  }
+  return { ids: (data ?? []).map((r: { film_id: string }) => r.film_id), total: count ?? 0 };
+}

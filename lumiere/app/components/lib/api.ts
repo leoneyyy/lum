@@ -25,14 +25,28 @@ async function accessToken(): Promise<string | null> {
   });
 }
 
+const MAX_RATE_RETRIES = 2;
+const MAX_RATE_WAIT_MS = 10_000;
+
 async function apiFetch(path: string): Promise<Response> {
-  const token = await accessToken();
-  const r = await fetch(path, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
-  if (r.status !== 401 || !token) return r;
-  // token went stale between reading and the server checking it: refresh once
-  const { data } = await getSupabase()!.auth.refreshSession();
-  if (!data.session) return r;
-  return fetch(path, { headers: { Authorization: `Bearer ${data.session.access_token}` } });
+  let token = await accessToken();
+  const send = () => fetch(path, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+
+  let r = await send();
+  if (r.status === 401 && token) {
+    // token went stale between reading and the server checking it: refresh once
+    const { data } = await getSupabase()!.auth.refreshSession();
+    if (!data.session) return r;
+    token = data.session.access_token;
+    r = await send();
+  }
+  // over the per-user limit (big imports, long grids): wait it out instead of failing
+  for (let i = 0; r.status === 429 && i < MAX_RATE_RETRIES; i++) {
+    const seconds = Number(r.headers.get('Retry-After')) || 5;
+    await new Promise(res => setTimeout(res, Math.min(seconds * 1000, MAX_RATE_WAIT_MS)));
+    r = await send();
+  }
+  return r;
 }
 
 export async function searchFilms(q: string): Promise<Film[]> {

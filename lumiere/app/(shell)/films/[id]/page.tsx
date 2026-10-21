@@ -118,10 +118,10 @@ export default function FilmDetailPage() {
   return (
     <div>
       {film.backdropUrl && (
-        <div style={{
+        <div className="full-bleed" style={{
           // TMDB backdrops are 16:9 — matching the box shows the whole frame
           // at any width instead of cropping it to a thin strip on laptops.
-          position: 'relative', aspectRatio: '16 / 9', maxHeight: 'min(55vh, 480px)', width: '100%', overflow: 'hidden',
+          position: 'relative', aspectRatio: '16 / 9', maxHeight: 'min(55vh, 480px)', overflow: 'hidden',
           borderBottom: `1px solid ${t.line}`,
         }}>
           <img src={film.backdropUrl} alt="" style={{

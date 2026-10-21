@@ -10,7 +10,7 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
       position: 'relative', minHeight: '100vh',
       background: t.bg, color: t.cream,
     }}>
-      <div style={{ paddingBottom: 100 }}>{children}</div>
+      <div style={{ maxWidth: 720, margin: '0 auto', paddingBottom: 100 }}>{children}</div>
       <BottomNav t={t} />
       <Splash />
     </div>

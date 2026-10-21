@@ -114,8 +114,8 @@ export default function ProfilePage() {
   return (
     <div>
       {heroBackdrop && (
-        <div style={{
-          position: 'relative', aspectRatio: '16 / 9', maxHeight: 'min(55vh, 480px)', width: '100%', overflow: 'hidden',
+        <div className="full-bleed" style={{
+          position: 'relative', aspectRatio: '16 / 9', maxHeight: 'min(55vh, 480px)', overflow: 'hidden',
           borderBottom: `1px solid ${t.line}`,
         }}>
           <img src={heroBackdrop} alt="" style={{

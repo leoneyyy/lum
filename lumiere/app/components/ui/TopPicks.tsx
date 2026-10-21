@@ -112,6 +112,7 @@ export function TopPicksPicker({
       <div onClick={e => e.stopPropagation()} style={{
         background: t.bg, borderTop: `1px solid ${t.line}`,
         padding: '20px 20px 34px', maxHeight: '70vh', overflow: 'auto',
+        width: '100%', maxWidth: 720, alignSelf: 'center',
       }}>
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',

@@ -8,3 +8,7 @@ input, textarea { color: inherit; font-family: inherit; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(235,230,216,0.15); }
+
+/* Content sits in a centred column on wide screens (see (shell)/layout);
+   heroes opt out of it to span the whole viewport. */
+.full-bleed { width: 100vw; margin-left: calc(50% - 50vw); }

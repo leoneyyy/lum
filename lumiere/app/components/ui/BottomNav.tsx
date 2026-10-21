@@ -21,7 +21,10 @@ export function BottomNav({ t }: Props) {
       paddingBottom: 34, paddingTop: 8,
       background: t.bg, borderTop: `1px solid ${t.line}`,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start' }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start',
+        maxWidth: 720, margin: '0 auto',
+      }}>
         {tabs.map(x => {
           const active = x.href === '/' ? pathname === '/' : pathname.startsWith(x.href);
           const c = active ? t.cream : t.muted;

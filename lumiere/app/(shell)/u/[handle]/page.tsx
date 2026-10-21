@@ -15,6 +15,7 @@ import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore
 import type { Film, LogEntry, Profile } from '@/app/components/lib/types';
 import { Avatar, avatarFor, Eyebrow, ReactionButton } from '@/app/components/ui/Primitives';
 import { TopPicksGrid } from '@/app/components/ui/TopPicks';
+import { ShareProfileButton, PublicWatchedStrip, PublicListsSection } from '@/app/components/ui/PublicShelves';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import { Poster } from '@/app/components/ui/Poster';
 
@@ -135,6 +136,10 @@ export default function UserPage() {
           }}>{profile.bio}</div>
         )}
 
+        <div style={{ marginTop: 14 }}>
+          <ShareProfileButton handle={profile.handle} t={t} />
+        </div>
+
         {!isSelf && (auth.status === 'anon' || auth.status === 'user') && me && (
           <FollowButton id={profile.id} isFollowing={isFollowing} t={t} />
         )}
@@ -160,6 +165,9 @@ export default function UserPage() {
           </div>
         </div>
       )}
+
+      {profile.showWatched && <PublicWatchedStrip ownerId={profile.id} t={t} />}
+      <PublicListsSection ownerId={profile.id} t={t} isSelf={isSelf} />
 
       <div style={{ padding: '20px' }}>
         <Eyebrow num="§" label={isSelf ? 'your public log' : 'public log'} t={t} style={{ marginBottom: 16 }} />

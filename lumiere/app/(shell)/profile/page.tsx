@@ -14,6 +14,7 @@ import { useWatched } from '@/app/components/lib/watchedStore';
 import type { Film, LogEntry } from '@/app/components/lib/types';
 import { Avatar, avatarFor, Eyebrow, ReactionButton } from '@/app/components/ui/Primitives';
 import { TopPicksGrid } from '@/app/components/ui/TopPicks';
+import { ShareProfileButton, PublicListsSection } from '@/app/components/ui/PublicShelves';
 import { CryMeter } from '@/app/components/ui/CryMeter';
 import { Poster } from '@/app/components/ui/Poster';
 
@@ -53,7 +54,10 @@ export default function ProfilePage() {
         fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
         textTransform: 'uppercase', color: t.muted,
       }}>§ self</div>
-      <SettingsLink t={t} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        {profile && <ShareProfileButton handle={profile.handle} t={t} />}
+        <SettingsLink t={t} />
+      </div>
     </div>
   );
 
@@ -127,8 +131,9 @@ export default function ProfilePage() {
             background: `linear-gradient(180deg, transparent 65%, ${t.bg})`,
           }} />
           <div style={{
-            position: 'absolute', top: 14, right: 18,
+            position: 'absolute', top: 14, right: 18, display: 'flex', gap: 8,
           }}>
+            <ShareProfileButton handle={profile.handle} t={t} dark />
             <SettingsLink t={t} dark />
           </div>
         </div>
@@ -183,6 +188,7 @@ export default function ProfilePage() {
       )}
 
       <WatchedSection t={t} />
+      <PublicListsSection ownerId={profile.id} t={t} isSelf />
 
       <div style={{ padding: '20px' }}>
         <Eyebrow num="§" label="your public log" t={t} style={{ marginBottom: 16 }} />

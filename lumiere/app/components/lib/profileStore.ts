@@ -13,6 +13,7 @@ type Row = {
   top_films: string[] | null;
   top_series: string[] | null;
   public_theme: string | null;
+  show_watched: boolean | null;  // null until the public_shelves migration runs
 };
 
 const VALID_THEMES = new Set(['indigo', 'oxblood', 'bone', 'acid']);
@@ -31,6 +32,7 @@ function rowToProfile(r: Row): Profile {
     topFilms: r.top_films ?? [],
     topSeries: r.top_series ?? [],
     publicTheme: theme,
+    showWatched: !!r.show_watched,
   };
 }
 
@@ -232,6 +234,30 @@ export async function setPublicTheme(theme: Profile['publicTheme']): Promise<str
   const { data, error } = await sb
     .from('profiles')
     .update({ public_theme: theme ?? null, updated_at: new Date().toISOString() })
+    .eq('id', myUserId)
+    .select()
+    .single();
+  if (error) {
+    myProfile = prev;
+    notifyMine();
+    return error.message;
+  }
+  myProfile = rowToProfile(data as Row);
+  notifyMine();
+  return null;
+}
+
+export async function setShowWatched(show: boolean): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb || !myUserId || !myProfile) return 'not signed in';
+
+  const prev = myProfile;
+  myProfile = { ...myProfile, showWatched: show };
+  notifyMine();
+
+  const { data, error } = await sb
+    .from('profiles')
+    .update({ show_watched: show, updated_at: new Date().toISOString() })
     .eq('id', myUserId)
     .select()
     .single();

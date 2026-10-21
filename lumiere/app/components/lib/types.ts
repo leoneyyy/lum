@@ -53,6 +53,7 @@ export interface Profile {
   topFilms: string[];
   topSeries: string[];
   publicTheme?: 'indigo' | 'oxblood' | 'bone' | 'acid' | null;
+  showWatched: boolean;  // watched films visible on the public profile
 }
 
 export interface Friend {

@@ -121,11 +121,11 @@ export default function FilmDetailPage() {
         <div style={{
           // TMDB backdrops are 16:9 — matching the box shows the whole frame
           // at any width instead of cropping it to a thin strip on laptops.
-          position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden',
+          position: 'relative', aspectRatio: '16 / 9', maxHeight: 'min(55vh, 480px)', width: '100%', overflow: 'hidden',
           borderBottom: `1px solid ${t.line}`,
         }}>
           <img src={film.backdropUrl} alt="" style={{
-            display: 'block', width: '100%', height: '100%', objectFit: 'cover',
+            display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%',
             filter: 'brightness(0.85)',
           }} />
           <div style={{

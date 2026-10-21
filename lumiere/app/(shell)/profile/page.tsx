@@ -416,7 +416,7 @@ function OnboardingCard({ t, isAnon }: { t: Theme; isAnon: boolean }) {
       </div>
 
       {isAnon && (
-        <Link href="/profile/settings" style={{
+        <Link href="/account" style={{
           padding: '12px 14px', border: `1px dashed ${t.line}`,
           textDecoration: 'none', color: 'inherit',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -425,11 +425,11 @@ function OnboardingCard({ t, isAnon }: { t: Theme; isAnon: boolean }) {
             <div style={{
               fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
               textTransform: 'uppercase', color: t.muted, marginBottom: 4,
-            }}>tip</div>
+            }}>already have an account?</div>
             <div style={{
               fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 14,
               color: t.creamDim,
-            }}>attach an email so this account survives a browser wipe.</div>
+            }}>sign in, or create one with email + password so your log follows you to every device.</div>
           </div>
           <div style={{
             fontFamily: LumiereType.mono, fontSize: 18, color: t.creamDim,

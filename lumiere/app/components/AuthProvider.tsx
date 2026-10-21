@@ -85,8 +85,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       apply(anon.session ?? null, anonErr?.message ?? null);
     })();
 
-    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = sb.auth.onAuthStateChange((event, session) => {
       apply(session);
+      // signing out leaves no session at all; start a fresh anonymous one so
+      // the app keeps working instead of sitting on 'connecting…'. Deferred:
+      // auth calls inside this callback can deadlock the client.
+      if (event === 'SIGNED_OUT') {
+        setTimeout(() => {
+          if (cancel) return;
+          void sb.auth.signInAnonymously().then(({ error }) => {
+            if (error) apply(null, error.message);
+          });
+        }, 0);
+      }
     });
 
     return () => {

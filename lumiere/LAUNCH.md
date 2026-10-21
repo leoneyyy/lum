@@ -38,7 +38,13 @@ Supabase → **Authentication → URL Configuration**:
 - **Site URL:** `https://lum-theta.vercel.app` (später deine Domain)
 - **Redirect URLs:** `https://lum-theta.vercel.app/**` und `http://localhost:3000/**` (zum Entwickeln), später zusätzlich `https://deine-domain.de/**`
 
-Ohne das führen Login-Links aus den E-Mails ins Leere oder auf localhost.
+Ohne das führen Login-Links aus den E-Mails ins Leere oder auf localhost. Das gilt auch für die Links zum Bestätigen eines neuen Kontos (`/account`) und zum Zurücksetzen des Passworts (`/account/reset`); die `/**`-Einträge decken beide ab.
+
+Supabase → **Authentication → Sign In / Providers → Email**:
+- **Email** aktiviert lassen (für Konten mit Passwort und für Login-Links).
+- **Confirm email** an lassen: Neue Konten müssen ihre Adresse bestätigen.
+- **Minimum password length** auf `8` setzen, passend zur App.
+- **Allow anonymous sign-ins** muss an bleiben: Jeder Besuch startet anonym, ein Konto wertet diese Sitzung nur auf.
 
 ## 4. Eigene Domain (optional, aber empfohlen)
 

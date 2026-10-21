@@ -328,3 +328,18 @@ function mapCredit(c: any, character?: string, department?: string, job?: string
     job: job || undefined,
   };
 }
+
+// Resolve any of our film ids:
+//   tmdb_m_<movieId> · tmdb_t_<tvId> · tmdb_t_<tvId>_s<s> · tmdb_t_<tvId>_s<s>_e<e>
+// Returns null for ids that don't match a known shape.
+export async function getFilmById(id: string): Promise<Film | null> {
+  const mMovie = id.match(/^tmdb_m_(\d+)$/);
+  if (mMovie) return getMovie(+mMovie[1]);
+  const mEp = id.match(/^tmdb_t_(\d+)_s(\d+)_e(\d+)$/);
+  if (mEp) return getEpisode(+mEp[1], +mEp[2], +mEp[3]);
+  const mSeason = id.match(/^tmdb_t_(\d+)_s(\d+)$/);
+  if (mSeason) return getSeason(+mSeason[1], +mSeason[2]);
+  const mTv = id.match(/^tmdb_t_(\d+)$/);
+  if (mTv) return getSeries(+mTv[1]);
+  return null;
+}

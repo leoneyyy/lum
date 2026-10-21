@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { DM_Serif_Display, Cormorant_Garamond, JetBrains_Mono } from 'next/font/google';
 import { TweaksProvider } from '@/app/components/TweaksProvider';
 import { AuthProvider } from '@/app/components/AuthProvider';
@@ -11,6 +11,18 @@ const mono = JetBrains_Mono({ weight: ['400', '500', '600'], subsets: ['latin'],
 export const metadata: Metadata = {
   title: 'Lumiere',
   description: 'A field guide to what you watched.',
+  appleWebApp: {
+    capable: true,
+    title: 'Lumière',
+    statusBarStyle: 'black-translucent',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#06040a',
+  // Draw under the notch / home indicator when installed; the shell pads
+  // itself with the safe-area insets.
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -17,8 +17,8 @@ export function BottomNav({ t }: Props) {
   ];
   return (
     <div style={{
-      position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 40,
-      paddingBottom: 34, paddingTop: 8,
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40,
+      paddingBottom: 'max(14px, env(safe-area-inset-bottom))', paddingTop: 8,
       background: t.bg, borderTop: `1px solid ${t.line}`,
     }}>
       <div style={{

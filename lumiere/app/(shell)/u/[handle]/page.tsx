@@ -81,11 +81,11 @@ export default function UserPage() {
     <div>
       {heroBackdrop && (
         <div style={{
-          position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden',
+          position: 'relative', aspectRatio: '16 / 9', maxHeight: 'min(55vh, 480px)', width: '100%', overflow: 'hidden',
           borderBottom: `1px solid ${t.line}`,
         }}>
           <img src={heroBackdrop} alt="" style={{
-            width: '100%', height: '100%', objectFit: 'cover',
+            width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%',
             filter: 'brightness(0.8)',
           }} />
           <div style={{

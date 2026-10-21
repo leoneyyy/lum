@@ -125,7 +125,7 @@ export default function FilmDetailPage() {
           borderBottom: `1px solid ${t.line}`,
         }}>
           <img src={film.backdropUrl} alt="" style={{
-            display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%',
+            display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center',
             filter: 'brightness(0.85)',
           }} />
           <div style={{

@@ -1,11 +1,12 @@
 // app/api/films/[id]/route.ts — fetch one film/episode by our id format
 import { NextRequest, NextResponse } from 'next/server';
-import { getMovie, getEpisode, getSeries } from '@/app/components/lib/tmdb';
+import { getMovie, getEpisode, getSeason, getSeries } from '@/app/components/lib/tmdb';
 
 // id format:
 //   tmdb_m_<movieId>
 //   tmdb_t_<tvId>              (whole show)
-//   tmdb_t_<tvId>_s<s>_e<e>    (episode)
+//   tmdb_t_<tvId>_s<s>          (season)
+//   tmdb_t_<tvId>_s<s>_e<e>     (episode)
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -20,6 +21,12 @@ export async function GET(
     if (mEp) {
       return NextResponse.json({
         film: await getEpisode(+mEp[1], +mEp[2], +mEp[3]),
+      });
+    }
+    const mSeason = id.match(/^tmdb_t_(\d+)_s(\d+)$/);
+    if (mSeason) {
+      return NextResponse.json({
+        film: await getSeason(+mSeason[1], +mSeason[2]),
       });
     }
     const mTv = id.match(/^tmdb_t_(\d+)$/);

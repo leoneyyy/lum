@@ -56,15 +56,29 @@ export async function searchMulti(query: string): Promise<Film[]> {
     .map((x: any) => x.media_type === 'tv' ? mapTv(x) : mapMovie(x));
 }
 
+// Title-treatment logo (the stylised name graphic). English first, then
+// language-neutral, then whatever TMDB has.
+function pickLogo(images: { logos?: { file_path?: string; iso_639_1?: string | null }[] } | undefined): string | null {
+  const logos = (images?.logos || []).filter(l => l.file_path);
+  const best = logos.find(l => l.iso_639_1 === 'en')
+    ?? logos.find(l => !l.iso_639_1)
+    ?? logos[0];
+  return best?.file_path ? `${IMG_BASE}/w500${best.file_path}` : null;
+}
+
+const WITH_IMAGES = 'include_image_language=en,null';
+
 export async function getMovie(id: number): Promise<Film> {
-  const url = `${TMDB_BASE}/movie/${id}?append_to_response=credits`;
+  const url = `${TMDB_BASE}/movie/${id}?append_to_response=credits,images&${WITH_IMAGES}`;
   const r = await fetch(url, { headers: authHeaders(), next: { revalidate: 3600 } });
   if (!r.ok) throw new Error(`TMDB movie ${id} failed: ${r.status}`);
   const j = await r.json();
   const film = mapMovie(j);
   film.runtime = j.runtime;
+  film.logoUrl = pickLogo(j.images);
   const director = (j.credits?.crew || []).find((c: any) => c.job === 'Director');
   film.dir = director?.name;
+  film.dirId = director?.id;
   film.tags = (j.genres || []).map((g: any) => g.name.toLowerCase());
   return film;
 }
@@ -79,12 +93,15 @@ interface TmdbImage { file_path?: string }
 export async function getFilmImages(id: string): Promise<ImageCatalog> {
   const mMovie = id.match(/^tmdb_m_(\d+)$/);
   const mEp = id.match(/^tmdb_t_(\d+)_s(\d+)_e(\d+)$/);
+  const mSeason = id.match(/^tmdb_t_(\d+)_s(\d+)$/);
   const mTv = id.match(/^tmdb_t_(\d+)$/);
   let url: string;
   if (mMovie) {
     url = `${TMDB_BASE}/movie/${mMovie[1]}/images?include_image_language=en,null`;
   } else if (mEp) {
     url = `${TMDB_BASE}/tv/${mEp[1]}/season/${mEp[2]}/episode/${mEp[3]}/images`;
+  } else if (mSeason) {
+    url = `${TMDB_BASE}/tv/${mSeason[1]}/season/${mSeason[2]}/images?include_image_language=en,null`;
   } else if (mTv) {
     url = `${TMDB_BASE}/tv/${mTv[1]}/images?include_image_language=en,null`;
   } else {
@@ -103,11 +120,12 @@ export async function getFilmImages(id: string): Promise<ImageCatalog> {
 }
 
 export async function getSeries(tvId: number): Promise<Film> {
-  const url = `${TMDB_BASE}/tv/${tvId}?append_to_response=credits`;
+  const url = `${TMDB_BASE}/tv/${tvId}?append_to_response=credits,images&${WITH_IMAGES}`;
   const r = await fetch(url, { headers: authHeaders(), next: { revalidate: 3600 } });
   if (!r.ok) throw new Error(`TMDB series ${tvId} failed: ${r.status}`);
   const j = await r.json();
   const film = mapTv(j);
+  film.logoUrl = pickLogo(j.images);
   const creator = (j.created_by || [])[0];
   film.dir = creator?.name;
   film.runtime = Array.isArray(j.episode_run_time) ? j.episode_run_time[0] : undefined;
@@ -165,8 +183,38 @@ export async function getSeasonEpisodes(tvId: number, season: number): Promise<E
   }));
 }
 
+export async function getSeason(tvId: number, season: number): Promise<Film> {
+  const tvUrl = `${TMDB_BASE}/tv/${tvId}?append_to_response=images&${WITH_IMAGES}`;
+  const sUrl = `${TMDB_BASE}/tv/${tvId}/season/${season}`;
+  const [tvR, sR] = await Promise.all([
+    fetch(tvUrl, { headers: authHeaders(), next: { revalidate: 3600 } }),
+    fetch(sUrl, { headers: authHeaders(), next: { revalidate: 3600 } }),
+  ]);
+  if (!tvR.ok || !sR.ok) throw new Error('TMDB season failed');
+  const tv = await tvR.json();
+  const s = await sR.json();
+  return {
+    id: `tmdb_t_${tvId}_s${season}`,
+    tmdbId: tvId,
+    title: tv.name,
+    year: +(s.air_date || tv.first_air_date || '').slice(0, 4) || 0,
+    kind: 'series',
+    season,
+    epTitle: s.name || `Season ${season}`,
+    posterUrl: s.poster_path
+      ? `${IMG_BASE}/w500${s.poster_path}`
+      : posterUrl(tv.poster_path),
+    backdropUrl: posterUrl(tv.backdrop_path, 'original'),
+    logoUrl: pickLogo(tv.images),
+    synopsis: s.overview || tv.overview,
+    tags: (tv.genres || []).map((g: any) => g.name.toLowerCase()),
+    poster: '#3a3a4a',
+    posterAccent: '#ebe6d8',
+  };
+}
+
 export async function getEpisode(tvId: number, season: number, episode: number): Promise<Film> {
-  const tvUrl = `${TMDB_BASE}/tv/${tvId}`;
+  const tvUrl = `${TMDB_BASE}/tv/${tvId}?append_to_response=images&${WITH_IMAGES}`;
   const epUrl = `${TMDB_BASE}/tv/${tvId}/season/${season}/episode/${episode}`;
   const [tvR, epR] = await Promise.all([
     fetch(tvUrl, { headers: authHeaders(), next: { revalidate: 3600 } }),
@@ -185,9 +233,98 @@ export async function getEpisode(tvId: number, season: number, episode: number):
     epTitle: ep.name,
     runtime: ep.runtime,
     posterUrl: ep.still_path ? `${IMG_BASE}/w500${ep.still_path}` : posterUrl(tv.poster_path),
+    backdropUrl: posterUrl(tv.backdrop_path, 'original'),
+    logoUrl: pickLogo(tv.images),
     synopsis: ep.overview || tv.overview,
     tags: (tv.genres || []).map((g: any) => g.name.toLowerCase()),
     poster: '#3a3a4a',
     posterAccent: '#ebe6d8',
+  };
+}
+
+// ── people ─────────────────────────────────────────────────────────
+
+export interface Person {
+  id: string;            // `tmdb_p_${tmdbId}`
+  tmdbId: number;
+  name: string;
+  profileUrl: string | null;
+  knownForDept?: string;
+  knownFor: Array<{ id: string; title: string; year: number; kind: 'film' | 'series'; posterUrl: string | null }>;
+}
+
+function mapPersonSearchResult(r: any): Person {
+  const knownFor = (r.known_for || [])
+    .filter((k: any) => k.media_type === 'movie' || k.media_type === 'tv')
+    .map((k: any) => k.media_type === 'tv' ? mapTv(k) : mapMovie(k))
+    .map((f: Film) => ({ id: f.id, title: f.title, year: f.year, kind: f.kind, posterUrl: f.posterUrl ?? null }));
+  return {
+    id: `tmdb_p_${r.id}`,
+    tmdbId: r.id,
+    name: r.name || '',
+    profileUrl: r.profile_path ? `${IMG_BASE}/w185${r.profile_path}` : null,
+    knownForDept: r.known_for_department,
+    knownFor,
+  };
+}
+
+export async function searchPeople(query: string): Promise<Person[]> {
+  if (!query) return [];
+  const url = `${TMDB_BASE}/search/person?query=${encodeURIComponent(query)}&include_adult=false`;
+  const r = await fetch(url, { headers: authHeaders(), next: { revalidate: 300 } });
+  if (!r.ok) throw new Error(`TMDB person search failed: ${r.status}`);
+  const json = await r.json();
+  return (json.results || []).map(mapPersonSearchResult);
+}
+
+export interface PersonCredit {
+  id: string;
+  title: string;
+  year: number;
+  kind: 'film' | 'series';
+  posterUrl: string | null;
+  character?: string;
+  department?: string;
+  job?: string;
+}
+
+export async function getPersonCredits(tmdbId: number): Promise<{ person: Person; credits: PersonCredit[] }> {
+  const personUrl = `${TMDB_BASE}/person/${tmdbId}?append_to_response=combined_credits`;
+  const r = await fetch(personUrl, { headers: authHeaders(), next: { revalidate: 3600 } });
+  if (!r.ok) throw new Error(`TMDB person ${tmdbId} failed: ${r.status}`);
+  const j = await r.json();
+  const person: Person = {
+    id: `tmdb_p_${j.id}`,
+    tmdbId: j.id,
+    name: j.name || '',
+    profileUrl: j.profile_path ? `${IMG_BASE}/w185${j.profile_path}` : null,
+    knownForDept: j.known_for_department,
+    knownFor: [],
+  };
+  const cast = (j.combined_credits?.cast || []).map((c: any) => mapCredit(c, c.character, undefined, undefined));
+  const crew = (j.combined_credits?.crew || []).map((c: any) => mapCredit(c, undefined, c.department, c.job));
+  // dedupe by id, keep cast over crew when both
+  const seen = new Map<string, PersonCredit>();
+  for (const c of [...cast, ...crew]) {
+    if (!seen.has(c.id)) seen.set(c.id, c);
+  }
+  const credits = Array.from(seen.values()).sort((a, b) => (b.year || 0) - (a.year || 0));
+  return { person, credits };
+}
+
+function mapCredit(c: any, character?: string, department?: string, job?: string): PersonCredit {
+  const isTv = c.media_type === 'tv';
+  const id = isTv ? `tmdb_t_${c.id}` : `tmdb_m_${c.id}`;
+  const title = isTv ? (c.name || c.original_name) : (c.title || c.original_title);
+  const dateStr = isTv ? (c.first_air_date || '') : (c.release_date || '');
+  return {
+    id,
+    title: title || '',
+    year: +(dateStr || '').slice(0, 4) || 0,
+    kind: isTv ? 'series' : 'film',
+    posterUrl: c.poster_path ? `${IMG_BASE}/w500${c.poster_path}` : null,
+    character: character || undefined,
+    department: department || undefined,
+    job: job || undefined,
   };
 }

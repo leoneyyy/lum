@@ -21,6 +21,9 @@ import { useCircleEntriesForFilm } from '@/app/components/lib/feedStore';
 import { useProfiles } from '@/app/components/lib/profileStore';
 import { useFollowing } from '@/app/components/lib/followStore';
 import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore';
+import { useIsWatched, markWatched, unmarkWatched } from '@/app/components/lib/watchedStore';
+import { useIsOnWatchlist, addToWatchlist, removeFromWatchlist } from '@/app/components/lib/watchlistStore';
+import { ListPicker } from '@/app/components/ui/ListPicker';
 
 export default function FilmDetailPage() {
   const params = useParams<{ id: string }>();
@@ -116,16 +119,18 @@ export default function FilmDetailPage() {
     <div>
       {film.backdropUrl && (
         <div style={{
-          position: 'relative', height: 220, overflow: 'hidden',
+          // TMDB backdrops are 16:9 — matching the box shows the whole frame
+          // at any width instead of cropping it to a thin strip on laptops.
+          position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden',
           borderBottom: `1px solid ${t.line}`,
         }}>
           <img src={film.backdropUrl} alt="" style={{
-            width: '100%', height: '100%', objectFit: 'cover',
-            filter: 'brightness(0.55) saturate(0.85)',
+            display: 'block', width: '100%', height: '100%', objectFit: 'cover',
+            filter: 'brightness(0.85)',
           }} />
           <div style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(180deg, transparent 40%, ${t.bg})`,
+            background: `linear-gradient(180deg, transparent 70%, ${t.bg})`,
           }} />
           <button onClick={() => setPicker('backdrop')} style={{
             position: 'absolute', top: 12, right: 12,
@@ -169,13 +174,33 @@ export default function FilmDetailPage() {
             <div style={{
               fontFamily: LumiereType.display, fontSize: 32, lineHeight: 1,
               color: t.cream, letterSpacing: -0.8, marginBottom: 10,
-            }}>{film.title}</div>
+            }}>
+              <TitleMark film={film} />
+              {film.season != null && (
+                <div style={{
+                  fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 18,
+                  color: t.creamDim, lineHeight: 1.2, marginTop: 4,
+                }}>
+                  {film.episode != null
+                    ? `s${String(film.season).padStart(2, '0')}e${String(film.episode).padStart(2, '0')}${film.epTitle ? ` · ${film.epTitle}` : ''}`
+                    : (film.epTitle || `season ${film.season}`)}
+                </div>
+              )}
+            </div>
             <MetaRow t={t} items={[
               film.year ? String(film.year) : null,
-              film.dir ? `dir. ${film.dir}` : null,
+              film.dir ? (
+                film.dirId ? (
+                  <Link
+                    key="dir"
+                    href={`/people/tmdb_p_${film.dirId}`}
+                    style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 3 }}
+                  >dir. {film.dir}</Link>
+                ) : `dir. ${film.dir}`
+              ) : null,
               film.runtime ? `${film.runtime}m` : null,
               film.kind,
-            ].filter(Boolean) as string[]} />
+            ].filter(Boolean) as React.ReactNode[]} />
             {film.tags?.length ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
                 {film.tags.slice(0, 6).map(tag => (
@@ -200,12 +225,19 @@ export default function FilmDetailPage() {
 
       <div style={{ padding: '8px 20px 20px' }}>
         {mode.kind === 'closed' ? (
-          <button onClick={startNew} style={{
-            display: 'block', width: '100%', padding: '16px 0',
-            background: t.cream, color: t.bg, border: 'none', cursor: 'pointer',
-            fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 3,
-            textTransform: 'uppercase',
-          }}>log this →</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button onClick={startNew} style={{
+              display: 'block', width: '100%', padding: '16px 0',
+              background: t.cream, color: t.bg, border: 'none', cursor: 'pointer',
+              fontFamily: LumiereType.mono, fontSize: 11, letterSpacing: 3,
+              textTransform: 'uppercase',
+            }}>log this →</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <WatchedToggle filmId={id} t={t} />
+              <WatchlistToggle filmId={id} t={t} />
+            </div>
+            <ListPickerButton filmId={id} t={t} />
+          </div>
         ) : (
           <div style={{
             border: `1px solid ${t.line}`, padding: 18, marginTop: 4,
@@ -361,12 +393,38 @@ export default function FilmDetailPage() {
   );
 }
 
-function MetaRow({ t, items }: { t: ReturnType<typeof useTweaks>['theme']; items: string[] }) {
+// The film's own title treatment when TMDB has one; plain text otherwise
+// (or if the image fails to load).
+function TitleMark({ film }: { film: Film }) {
+  const [failed, setFailed] = React.useState(false);
+  if (!film.logoUrl || failed) return <>{film.title}</>;
+  return (
+    <img
+      src={film.logoUrl}
+      alt={film.title}
+      onError={() => setFailed(true)}
+      style={{
+        display: 'block', maxWidth: '100%', maxHeight: 110,
+        objectFit: 'contain', objectPosition: 'left center',
+        filter: 'drop-shadow(0 2px 10px rgba(0,0,0,0.55))',
+      }}
+    />
+  );
+}
+
+function MetaRow({ t, items }: { t: ReturnType<typeof useTweaks>['theme']; items: React.ReactNode[] }) {
   return (
     <div style={{
       fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6,
       textTransform: 'uppercase', color: t.muted,
-    }}>{items.join(' · ')}</div>
+    }}>
+      {items.map((item, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && ' · '}
+          {item}
+        </React.Fragment>
+      ))}
+    </div>
   );
 }
 
@@ -485,6 +543,21 @@ function EpisodesSection({
           );
         })}
       </div>
+
+      {data.selected != null && (
+        <Link
+          href={`/films/${encodeURIComponent(`${seriesId}_s${data.selected}`)}`}
+          style={{
+            display: 'block', padding: '10px 12px', marginBottom: 14,
+            background: t.surface, border: `1px solid ${t.line}`,
+            textDecoration: 'none', color: 'inherit',
+            fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.8,
+            textTransform: 'uppercase',
+          }}
+        >
+          ◇ rate season {data.selected === 0 ? 'specials' : data.selected} →
+        </Link>
+      )}
 
       {!eps ? (
         <div style={{
@@ -657,5 +730,83 @@ function CenterNote({ t, text }: { t: ReturnType<typeof useTweaks>['theme']; tex
       fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 18,
       color: t.creamDim,
     }}>{text}</div>
+  );
+}
+
+function WatchedToggle({ filmId, t }: { filmId: string; t: ReturnType<typeof useTweaks>['theme'] }) {
+  const isWatched = useIsWatched(filmId);
+  const [busy, setBusy] = React.useState(false);
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    if (isWatched) await unmarkWatched(filmId);
+    else await markWatched(filmId);
+    setBusy(false);
+  };
+  return (
+    <button onClick={onClick} disabled={busy} style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      flex: 1, padding: '12px 0',
+      background: 'transparent',
+      color: isWatched ? t.signal : t.creamDim,
+      border: `1px solid ${isWatched ? t.signal : t.line}`,
+      cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+      fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+      textTransform: 'uppercase',
+    }}>
+      <span style={{ display: 'inline-block', width: 12, textAlign: 'center' }}>
+        {isWatched ? '✓' : '·'}
+      </span>
+      {isWatched ? 'watched' : 'mark watched'}
+    </button>
+  );
+}
+
+function ListPickerButton({ filmId, t }: { filmId: string; t: ReturnType<typeof useTweaks>['theme'] }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        width: '100%', padding: '12px 0',
+        background: 'transparent', color: t.creamDim,
+        border: `1px solid ${t.line}`, cursor: 'pointer',
+        fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+        textTransform: 'uppercase',
+      }}>
+        <span style={{ display: 'inline-block', width: 12, textAlign: 'center' }}>+</span>
+        add to list
+      </button>
+      {open && <ListPicker filmId={filmId} t={t} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function WatchlistToggle({ filmId, t }: { filmId: string; t: ReturnType<typeof useTweaks>['theme'] }) {
+  const onList = useIsOnWatchlist(filmId);
+  const [busy, setBusy] = React.useState(false);
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    if (onList) await removeFromWatchlist(filmId);
+    else await addToWatchlist(filmId);
+    setBusy(false);
+  };
+  return (
+    <button onClick={onClick} disabled={busy} style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      flex: 1, padding: '12px 0',
+      background: 'transparent',
+      color: onList ? t.accent : t.creamDim,
+      border: `1px solid ${onList ? t.accent : t.line}`,
+      cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+      fontFamily: LumiereType.mono, fontSize: 10, letterSpacing: 2,
+      textTransform: 'uppercase',
+    }}>
+      <span style={{ display: 'inline-block', width: 12, textAlign: 'center' }}>
+        {onList ? '★' : '+'}
+      </span>
+      {onList ? 'in watchlist' : 'watchlist'}
+    </button>
   );
 }

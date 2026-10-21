@@ -200,6 +200,73 @@ export function setEntryVisibility(id: string, visibility: Visibility): void {
   updateEntry(id, { visibility });
 }
 
+export interface ImportItem {
+  filmId: string;
+  cry: number;
+  ratings?: RatingMap;
+  note?: string;
+  visibility?: Visibility;
+  createdAt: string;
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  error?: string;
+}
+
+const dayKey = (iso: string) => iso.slice(0, 10);
+
+export async function importEntries(items: ImportItem[]): Promise<ImportResult> {
+  if (items.length === 0) return { imported: 0, skipped: 0 };
+
+  const seen = new Set<string>();
+  for (const e of cache) seen.add(`${e.filmId}|${dayKey(e.createdAt)}`);
+
+  const fresh: LogEntry[] = [];
+  let skipped = 0;
+  for (const it of items) {
+    const key = `${it.filmId}|${dayKey(it.createdAt)}`;
+    if (seen.has(key)) { skipped += 1; continue; }
+    seen.add(key);
+    fresh.push({
+      id: newId(),
+      userId: userId ?? 'local',
+      filmId: it.filmId,
+      cry: Math.max(0, Math.min(100, Math.round(it.cry))),
+      ratings: it.ratings ?? {},
+      note: it.note?.trim() || undefined,
+      createdAt: it.createdAt,
+      visibility: it.visibility ?? 'private',
+    });
+  }
+
+  if (fresh.length === 0) return { imported: 0, skipped };
+
+  if (mode === 'remote') {
+    const sb = getSupabase();
+    if (!sb || !userId) return { imported: 0, skipped, error: 'not signed in' };
+    const rows = fresh.map(e => ({
+      id: e.id,
+      user_id: userId,
+      film_id: e.filmId,
+      cry: e.cry,
+      ratings: e.ratings,
+      note: e.note ?? null,
+      created_at: e.createdAt,
+      visibility: e.visibility,
+    }));
+    const { error } = await sb.from('log_entries').insert(rows);
+    if (error) return { imported: 0, skipped, error: error.message };
+  }
+
+  cache = [...fresh, ...cache].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  notify();
+  if (mode === 'local') writeLocal(cache);
+
+  return { imported: fresh.length, skipped };
+}
+
 export function updateEntry(
   id: string,
   patch: { cry?: number; ratings?: RatingMap; note?: string | null; visibility?: Visibility },

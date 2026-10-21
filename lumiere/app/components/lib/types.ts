@@ -12,9 +12,11 @@ export interface Film {
   episode?: number;
   epTitle?: string;
   dir?: string;
+  dirId?: number;
   runtime?: number;
   posterUrl?: string | null;
   backdropUrl?: string | null;
+  logoUrl?: string | null;  // stylised title-treatment graphic from TMDB
   synopsis?: string;
   tags?: string[];
   // local-only rendering helpers (kept for backwards compat with prototype Poster)
@@ -50,6 +52,7 @@ export interface Profile {
   createdAt: string;
   topFilms: string[];
   topSeries: string[];
+  publicTheme?: 'indigo' | 'oxblood' | 'bone' | 'acid' | null;
 }
 
 export interface Friend {

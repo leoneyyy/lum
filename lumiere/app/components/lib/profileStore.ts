@@ -12,9 +12,15 @@ type Row = {
   created_at: string;
   top_films: string[] | null;
   top_series: string[] | null;
+  public_theme: string | null;
 };
 
+const VALID_THEMES = new Set(['indigo', 'oxblood', 'bone', 'acid']);
+
 function rowToProfile(r: Row): Profile {
+  const theme = r.public_theme && VALID_THEMES.has(r.public_theme)
+    ? (r.public_theme as Profile['publicTheme'])
+    : null;
   return {
     id: r.id,
     handle: r.handle,
@@ -24,6 +30,7 @@ function rowToProfile(r: Row): Profile {
     createdAt: r.created_at,
     topFilms: r.top_films ?? [],
     topSeries: r.top_series ?? [],
+    publicTheme: theme,
   };
 }
 
@@ -200,6 +207,31 @@ export async function setTopPicks(patch: { topFilms?: string[]; topSeries?: stri
   const { data, error } = await sb
     .from('profiles')
     .update(update)
+    .eq('id', myUserId)
+    .select()
+    .single();
+  if (error) {
+    myProfile = prev;
+    notifyMine();
+    return error.message;
+  }
+  myProfile = rowToProfile(data as Row);
+  notifyMine();
+  return null;
+}
+
+export async function setPublicTheme(theme: Profile['publicTheme']): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb || !myUserId || !myProfile) return 'not signed in';
+  if (theme && !VALID_THEMES.has(theme)) return 'unknown theme';
+
+  const prev = myProfile;
+  myProfile = { ...myProfile, publicTheme: theme ?? null };
+  notifyMine();
+
+  const { data, error } = await sb
+    .from('profiles')
+    .update({ public_theme: theme ?? null, updated_at: new Date().toISOString() })
     .eq('id', myUserId)
     .select()
     .single();

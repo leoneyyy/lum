@@ -23,6 +23,12 @@ let cache: LogEntry[] = [];
 let initialized = false;
 let realtimeUnsub: (() => void) | null = null;
 const listeners = new Set<() => void>();
+// Bumped on every user switch; a fetch that resolves after a newer switch
+// is stale and must not overwrite the cache.
+let loadGen = 0;
+// Optimistic inserts the server hasn't confirmed yet. Kept across refetches
+// so a fetch that lands mid-insert doesn't make a fresh entry vanish.
+const pending = new Map<string, LogEntry>();
 
 const notify = () => { for (const cb of listeners) cb(); };
 
@@ -57,7 +63,7 @@ function rowToEntry(r: Row): LogEntry {
   };
 }
 
-async function fetchRemote(): Promise<LogEntry[]> {
+async function fetchRemote(): Promise<LogEntry[] | null> {
   const sb = getSupabase();
   if (!sb || !userId) return [];
   const { data, error } = await sb
@@ -67,9 +73,53 @@ async function fetchRemote(): Promise<LogEntry[]> {
     .order('created_at', { ascending: false });
   if (error) {
     console.error('[lumiere] log fetch failed', error.message);
-    return [];
+    return null;  // keep what we have rather than blanking the log
   }
   return (data as Row[]).map(rowToEntry);
+}
+
+// Server rows plus any optimistic inserts still in flight, newest first.
+function withPending(rows: LogEntry[]): LogEntry[] {
+  if (pending.size === 0) return rows;
+  const have = new Set(rows.map(r => r.id));
+  const extra = [...pending.values()].filter(e => !have.has(e.id) && e.userId === userId);
+  return [...extra, ...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+// Refetch for the current user; ignored if the user changed meanwhile.
+async function refresh(): Promise<void> {
+  const gen = loadGen;
+  const rows = await fetchRemote();
+  if (gen !== loadGen || rows === null) return;
+  cache = withPending(rows);
+  notify();
+}
+
+// Entries logged in local mode (before sign-in finished, or before sync was
+// set up) live only in localStorage. Move them into the account once it's
+// ready, so switching to remote doesn't silently drop them.
+async function adoptLocalEntries(gen: number): Promise<void> {
+  const local = readLocal();
+  const sb = getSupabase();
+  if (local.length === 0 || !sb || !userId) return;
+  const owner = userId;
+  const rows = local.map(e => ({
+    id: isUuid(e.id) ? e.id : newId(),
+    user_id: owner,
+    film_id: e.filmId,
+    cry: e.cry,
+    ratings: e.ratings ?? {},
+    note: e.note ?? null,
+    created_at: e.createdAt,
+    visibility: e.visibility ?? 'private',
+  }));
+  const { error } = await sb.from('log_entries').upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
+  if (error) {
+    console.error('[lumiere] moving local log into account failed', error.message);
+    return;  // leave localStorage as is; we'll try again next time
+  }
+  try { localStorage.removeItem(LOCAL_KEY); } catch {}
+  if (gen === loadGen) await refresh();
 }
 
 function teardownRealtime() {
@@ -84,10 +134,7 @@ function setupRealtime() {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'log_entries', filter: `user_id=eq.${userId}` },
-      async () => {
-        cache = await fetchRemote();
-        notify();
-      },
+      () => { void refresh(); },
     )
     .subscribe();
   realtimeUnsub = () => { void sb.removeChannel(channel); };
@@ -101,12 +148,17 @@ export function setBackendUser(nextUserId: string | null) {
   teardownRealtime();
   userId = nextUserId;
   mode = nextMode;
+  const gen = ++loadGen;
 
   if (mode === 'remote') {
+    // don't show another user's (or the local) log while this one loads
+    cache = [];
+    notify();
     void (async () => {
-      cache = await fetchRemote();
-      notify();
+      await refresh();
+      if (gen !== loadGen) return;
       setupRealtime();
+      await adoptLocalEntries(gen);
     })();
   } else {
     cache = readLocal();
@@ -146,11 +198,23 @@ export function useFilmEntries(filmId: string): LogEntry[] {
   );
 }
 
+// log_entries.id is a uuid column. crypto.randomUUID only exists in secure
+// contexts (https/localhost), so e.g. a phone on the LAN dev server needs
+// the getRandomValues fallback; anything else would fail the insert.
 function newId(): string {
   try {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   } catch {}
-  return `e_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  b[6] = (b[6] & 0x0f) | 0x40;  // version 4
+  b[8] = (b[8] & 0x3f) | 0x80;  // RFC 4122 variant
+  const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+function isUuid(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 }
 
 export function saveEntry(input: {
@@ -172,6 +236,7 @@ export function saveEntry(input: {
   if (mode === 'remote') {
     const sb = getSupabase();
     if (sb && userId) {
+      pending.set(entry.id, entry);
       void sb.from('log_entries').insert({
         id: entry.id,
         user_id: userId,
@@ -182,6 +247,7 @@ export function saveEntry(input: {
         created_at: entry.createdAt,
         visibility: entry.visibility,
       }).then(({ error }) => {
+        pending.delete(entry.id);
         if (error) {
           console.error('[lumiere] log insert failed', error.message);
           cache = (cache).filter(e => e.id !== entry.id);

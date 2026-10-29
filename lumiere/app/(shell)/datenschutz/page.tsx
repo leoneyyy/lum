@@ -67,6 +67,13 @@ export default function DatenschutzPage() {
         die du auf „followers“ stellst, Listen, die du auf „public“ stellst, und deine Watched-Liste
         nur, wenn du sie in den Einstellungen freigibst. Alles andere ist nur für dich sichtbar.
       </p>
+      <p>
+        Deine Cry-Werte und Bewertungen fließen ohne Namen in Durchschnittswerte ein: den Schnitt
+        pro Film, die Verteilung und die Charts. Angezeigt werden sie erst, wenn mindestens drei
+        Personen einen Film bewertet haben; einzelne Einträge sind daraus nicht ablesbar.
+        Vorschläge, wem du folgen könntest, beruhen nur auf Daten, die andere ohnehin öffentlich
+        zeigen.
+      </p>
 
       <h2>6. Speicherung im Browser</h2>
       <p>

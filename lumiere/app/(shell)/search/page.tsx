@@ -164,8 +164,23 @@ export default function SearchPage() {
 
 function EmptyHint({ t }: { t: Theme }) {
   const hints = ['citizen kane', 'wong kar-wai', 'tilda swinton', 'in the mood for love'];
+  const card: React.CSSProperties = {
+    flex: 1, padding: '14px', border: `1px solid ${t.line}`, background: t.surface,
+    textDecoration: 'none', color: 'inherit',
+  };
   return (
     <div>
+      <Eyebrow num="◎" label="explore" t={t} style={{ marginBottom: 14 }} />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 26 }}>
+        <Link href="/charts" style={card}>
+          <div style={{ fontFamily: LumiereType.display, fontSize: 20, color: t.cream, letterSpacing: -0.4 }}>the top 500</div>
+          <div style={{ fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4, textTransform: 'uppercase', color: t.muted, marginTop: 6 }}>charts by everyone →</div>
+        </Link>
+        <Link href="/friends" style={card}>
+          <div style={{ fontFamily: LumiereType.display, fontSize: 20, color: t.cream, letterSpacing: -0.4 }}>people to follow</div>
+          <div style={{ fontFamily: LumiereType.mono, fontSize: 8, letterSpacing: 1.4, textTransform: 'uppercase', color: t.muted, marginTop: 6 }}>suggested for you →</div>
+        </Link>
+      </div>
       <Eyebrow num="00" label="try" t={t} style={{ marginBottom: 14 }} />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {hints.map(h => (

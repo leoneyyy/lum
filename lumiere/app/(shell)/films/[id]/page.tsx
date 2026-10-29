@@ -24,6 +24,7 @@ import { useReactions, toggleReaction } from '@/app/components/lib/reactionStore
 import { useIsWatched, markWatched, unmarkWatched } from '@/app/components/lib/watchedStore';
 import { useIsOnWatchlist, addToWatchlist, removeFromWatchlist } from '@/app/components/lib/watchlistStore';
 import { ListPicker } from '@/app/components/ui/ListPicker';
+import { CommunityRating } from '@/app/components/ui/CommunityRating';
 
 export default function FilmDetailPage() {
   const params = useParams<{ id: string }>();
@@ -372,6 +373,7 @@ export default function FilmDetailPage() {
         <EpisodesSection seriesId={id} t={t} />
       )}
 
+      <CommunityRating filmId={id} t={t} />
       <CircleForFilm filmId={id} t={t} />
 
       {picker && (

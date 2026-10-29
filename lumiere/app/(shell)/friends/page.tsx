@@ -13,6 +13,8 @@ import {
 } from '@/app/components/lib/followStore';
 import type { Profile } from '@/app/components/lib/types';
 import { Avatar, avatarFor, Eyebrow } from '@/app/components/ui/Primitives';
+import { fetchSuggestedProfiles } from '@/app/components/lib/communityStore';
+import type { SuggestedProfile } from '@/app/components/lib/communityStore';
 
 export default function FriendsPage() {
   const { theme: t } = useTweaks();
@@ -64,8 +66,10 @@ export default function FriendsPage() {
         <SearchBlock t={t} excludeIds={new Set([myProfile.id, ...followingIds])} />
       </div>
 
+      <SuggestionsBlock t={t} followingIds={followingIds} />
+
       <div style={{ padding: '24px 20px 40px' }}>
-        <Eyebrow num="01" label="following" t={t} style={{ marginBottom: 14 }} />
+        <Eyebrow num="02" label="following" t={t} style={{ marginBottom: 14 }} />
         {followState !== 'loaded' ? (
           <div style={{
             padding: '12px 0', fontFamily: LumiereType.body, fontStyle: 'italic',
@@ -241,6 +245,74 @@ function Blocked({
           textTransform: 'uppercase',
         }}>{cta.label}</Link>
       )}
+    </div>
+  );
+}
+
+function SuggestionsBlock({
+  t, followingIds,
+}: {
+  t: ReturnType<typeof useTweaks>['theme'];
+  followingIds: readonly string[];
+}) {
+  const [list, setList] = React.useState<SuggestedProfile[] | null>(null);
+  const [busy, setBusy] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancel = false;
+    void fetchSuggestedProfiles(12).then(rs => { if (!cancel) setList(rs); });
+    return () => { cancel = true; };
+  }, []);
+
+  // people you just followed drop out without a refetch
+  const shown = (list ?? []).filter(p => !followingIds.includes(p.id));
+  if (list === null || shown.length === 0) return null;
+
+  const onFollow = async (id: string) => {
+    setBusy(id);
+    await follow(id);
+    setBusy(null);
+  };
+
+  return (
+    <div style={{ padding: '24px 20px 12px' }}>
+      <Eyebrow num="01" label="suggested for you" t={t} style={{ marginBottom: 14 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {shown.map(p => {
+          const why = [
+            p.shared > 0 ? `${p.shared} film${p.shared === 1 ? '' : 's'} in common` : null,
+            p.followers > 0 ? `${p.followers} follower${p.followers === 1 ? '' : 's'}` : null,
+          ].filter(Boolean).join(' · ') || 'new here';
+          return (
+            <div key={p.id} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '10px 12px', border: `1px solid ${t.line}`, background: t.surface,
+            }}>
+              <Link href={`/u/${encodeURIComponent(p.handle)}`} style={{
+                display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0,
+                textDecoration: 'none', color: 'inherit',
+              }}>
+                <Avatar friend={avatarFor(p.id, p.handle, p.avatarUrl)} size={40} t={t} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: LumiereType.mono, fontSize: 12, letterSpacing: 1.2, color: t.cream,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>@{p.handle}</div>
+                  <div style={{
+                    fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 13, color: t.creamDim, marginTop: 2,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{p.name ? `${p.name} · ${why}` : why}</div>
+                </div>
+              </Link>
+              <button onClick={() => void onFollow(p.id)} disabled={busy === p.id} style={{
+                flexShrink: 0, padding: '7px 12px', cursor: busy === p.id ? 'default' : 'pointer',
+                background: t.cream, color: t.bg, border: 'none', opacity: busy === p.id ? 0.6 : 1,
+                fontFamily: LumiereType.mono, fontSize: 9, letterSpacing: 1.6, textTransform: 'uppercase',
+              }}>{busy === p.id ? '…' : 'follow'}</button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ Supabase → **SQL Editor**. Jede Migration aus `supabase/migrations/`, die noch
 Zuletzt dazugekommen:
 - `20261021000000_api_rate_limit.sql` (Anfragen-Limit)
 - `20261021010000_public_shelves.sql` (Watched auf dem Profil zeigen)
+- `20261029000000_community.sql` (Community-Bewertung, Charts, vorgeschlagene Nutzer)
 
 Prüfen: Table Editor zeigt `api_rate_limits`, und `profiles` hat eine Spalte `show_watched`.
 

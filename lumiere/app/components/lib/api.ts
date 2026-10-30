@@ -64,6 +64,17 @@ export async function getFilm(id: string): Promise<Film | null> {
   return j.film || null;
 }
 
+export const FILMS_BATCH_MAX = 50;
+
+/** Up to FILMS_BATCH_MAX films in one request; null if the request failed. */
+export async function getFilmsBatch(ids: string[]): Promise<Record<string, Film> | null> {
+  if (ids.length === 0) return {};
+  const r = await apiFetch(`/api/films?ids=${ids.map(encodeURIComponent).join(',')}`);
+  if (!r.ok) return null;
+  const j = await r.json();
+  return (j.films ?? {}) as Record<string, Film>;
+}
+
 export async function getFilmImages(id: string): Promise<ImageCatalog> {
   const r = await apiFetch(`/api/films/${encodeURIComponent(id)}/images`);
   if (!r.ok) throw new Error('images failed');

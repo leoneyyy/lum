@@ -343,3 +343,24 @@ export async function getFilmById(id: string): Promise<Film | null> {
   if (mTv) return getSeries(+mTv[1]);
   return null;
 }
+
+// Several films at once, for the batch route. A few TMDB requests in flight
+// at a time keeps us well under TMDB's rate limit; ids that fail or don't
+// resolve are simply left out.
+export async function getFilmsByIds(ids: string[], concurrency = 8): Promise<Record<string, Film>> {
+  const out: Record<string, Film> = {};
+  let next = 0;
+  const worker = async () => {
+    while (next < ids.length) {
+      const id = ids[next++];
+      try {
+        const film = await getFilmById(id);
+        if (film) out[id] = film;
+      } catch {
+        // one bad id shouldn't sink the batch
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, worker));
+  return out;
+}

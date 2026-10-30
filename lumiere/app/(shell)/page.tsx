@@ -21,7 +21,8 @@ export default function HomePage() {
   const { theme: t, tweaks } = useTweaks();
   const entries = useLog();
   const logStatus = useLogStatus();
-  const rawFilms = useFilmsForEntries(entries);
+  // only the entries on screen need film data
+  const rawFilms = useFilmsForEntries(React.useMemo(() => entries.slice(0, FEED_LIMIT), [entries]));
   const overrides = useFilmOverrides();
   const films = React.useMemo<Record<string, Film>>(() => {
     const out: Record<string, Film> = {};

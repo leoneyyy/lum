@@ -10,6 +10,7 @@ import { setOverridesUser } from '@/app/components/lib/filmOverrides';
 import { setWatchedUser } from '@/app/components/lib/watchedStore';
 import { setWatchlistUser } from '@/app/components/lib/watchlistStore';
 import { setListsUser } from '@/app/components/lib/listsStore';
+import { rememberAccount } from '@/app/components/lib/auth';
 
 export type AuthStatus = 'init' | 'anon' | 'user' | 'disabled' | 'error';
 
@@ -57,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userId = session?.user?.id ?? null;
       const email = session?.user?.email ?? null;
       const isAnon = !!session?.user?.is_anonymous;
+      if (userId && !isAnon && email) rememberAccount(email);
       setBackendUser(userId);
       setProfileUser(userId);
       setFollowUser(userId);

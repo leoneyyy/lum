@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType, DEFAULT_DIMS } from '@/app/components/lib/tokens';
 import type { DimKey } from '@/app/components/lib/tokens';
-import { useLog } from '@/app/components/lib/logStore';
+import { useLog, useLogStatus } from '@/app/components/lib/logStore';
+import { LogPending } from '@/app/components/ui/LogPending';
 import { useFilmsForEntries } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import type { Film, LogEntry } from '@/app/components/lib/types';
@@ -14,6 +15,7 @@ import { Eyebrow } from '@/app/components/ui/Primitives';
 export default function OrbitPage() {
   const { theme: t } = useTweaks();
   const entries = useLog();
+  const logStatus = useLogStatus();
   const rawFilms = useFilmsForEntries(entries);
   const overrides = useFilmOverrides();
   const films = React.useMemo<Record<string, Film>>(() => {
@@ -46,7 +48,9 @@ export default function OrbitPage() {
         }}>{stats.subtitle}</div>
       </div>
 
-      {entries.length === 0 ? (
+      {entries.length === 0 && logStatus !== 'loaded' ? (
+        <LogPending t={t} status={logStatus} />
+      ) : entries.length === 0 ? (
         <div style={{ padding: '60px 20px', textAlign: 'center' }}>
           <div style={{
             fontFamily: LumiereType.body, fontStyle: 'italic', fontSize: 18,

@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType } from '@/app/components/lib/tokens';
 import type { Theme } from '@/app/components/lib/tokens';
@@ -8,7 +8,7 @@ import { useAuth } from '@/app/components/AuthProvider';
 import { useLog } from '@/app/components/lib/logStore';
 import {
   createAccount, signInWithPassword, sendPasswordReset, setPassword, startEmailAuth, signOut,
-  MIN_PASSWORD,
+  MIN_PASSWORD, isStandalone,
 } from '@/app/components/lib/auth';
 
 type Tab = 'create' | 'signin';
@@ -37,7 +37,9 @@ export default function AccountPage() {
         {auth.status === 'init' && <Quiet t={t} text="connecting…" />}
         {auth.status === 'disabled' && <Quiet t={t} text="local mode: accounts need sync to be set up." />}
         {auth.status === 'error' && <Quiet t={t} text={`auth error · ${auth.error ?? 'unknown'}`} />}
-        {auth.status === 'anon' && <AnonView t={t} />}
+        {auth.status === 'anon' && (
+          <React.Suspense fallback={null}><AnonFromQuery t={t} /></React.Suspense>
+        )}
         {auth.status === 'user' && <UserView t={t} email={auth.email} />}
       </div>
     </div>
@@ -46,9 +48,16 @@ export default function AccountPage() {
 
 // ── signed out (anonymous session) ──────────────────────────────────
 
-function AnonView({ t }: { t: Theme }) {
-  const [tab, setTab] = React.useState<Tab>('create');
-  const [email, setEmail] = React.useState('');
+// '/account?signin=you@x' (from the signed-out notice) opens sign-in with the
+// email filled in.
+function AnonFromQuery({ t }: { t: Theme }) {
+  const signin = useSearchParams().get('signin');
+  return <AnonView key={signin ?? ''} t={t} signin={signin} />;
+}
+
+function AnonView({ t, signin }: { t: Theme; signin: string | null }) {
+  const [tab, setTab] = React.useState<Tab>(signin ? 'signin' : 'create');
+  const [email, setEmail] = React.useState(signin ?? '');
   const [notice, setNotice] = React.useState<string | null>(null);
 
   const switchTo = (next: Tab, msg?: string) => {
@@ -147,6 +156,7 @@ function CreateForm({
 
 function SignInForm({ t, email, setEmail }: { t: Theme; email: string; setEmail: (v: string) => void }) {
   const entries = useLog();
+  const [standalone] = React.useState(isStandalone);
   const [password, setPw] = React.useState('');
   const [busy, setBusy] = React.useState<'password' | 'reset' | 'link' | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
@@ -207,9 +217,15 @@ function SignInForm({ t, email, setEmail }: { t: Theme; email: string; setEmail:
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <TextButton t={t} onClick={() => void reset()} disabled={busy !== null || !email.trim()}
           label={busy === 'reset' ? 'sending…' : 'forgot password?'} />
-        <TextButton t={t} onClick={() => void link()} disabled={busy !== null || !email.trim()}
-          label={busy === 'link' ? 'sending…' : 'email me a login link instead'} />
+        {/* a login link would sign in the browser it opens in, not this app */}
+        {!standalone && (
+          <TextButton t={t} onClick={() => void link()} disabled={busy !== null || !email.trim()}
+            label={busy === 'link' ? 'sending…' : 'email me a login link instead'} />
+        )}
       </div>
+      {standalone && (
+        <Intro t={t} text="in the installed app, sign in with your password: links from emails open in your browser, not here. forgot it? reset it there, then come back and sign in." />
+      )}
     </form>
   );
 }

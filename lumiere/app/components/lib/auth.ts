@@ -56,8 +56,35 @@ export async function signOut(): Promise<string | null> {
   if (!sb) return 'offline';
   const { error } = await sb.auth.signOut();
   // don't leave the account's log copy behind on a shared device
-  if (!error) clearLogCaches();
+  if (!error) { clearLogCaches(); forgetAccount(); }
   return error?.message ?? null;
+}
+
+// ── "you were signed out" ───────────────────────────────────────────
+// The last real account signed in on this device. If the app later comes up
+// anonymous without the user signing out (the session was rejected, or they
+// signed in through a link that opened in another browser), we can say so
+// instead of silently showing an empty log.
+
+const LAST_ACCOUNT_KEY = 'lumiere:last-account';
+
+export function rememberAccount(email: string) {
+  try { localStorage.setItem(LAST_ACCOUNT_KEY, email); } catch {}
+}
+
+export function forgetAccount() {
+  try { localStorage.removeItem(LAST_ACCOUNT_KEY); } catch {}
+}
+
+export function getLastAccount(): string | null {
+  try { return localStorage.getItem(LAST_ACCOUNT_KEY); } catch { return null; }
+}
+
+/** Running as the installed home-screen app rather than in a browser tab. */
+export function isStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  const iosStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return iosStandalone || window.matchMedia?.('(display-mode: standalone)').matches === true;
 }
 
 // ── email + password ────────────────────────────────────────────────

@@ -1,9 +1,12 @@
 'use client';
 import React from 'react';
 import type { LogEntry, RatingMap, Visibility } from './types';
-import { getSupabase } from './supabase';
+import { getSupabase, isSupabaseConfigured } from './supabase';
 
 const LOCAL_KEY = 'lumiere:log';
+// Last known copy of an account's log, so reopening the app shows it right
+// away instead of an empty page while the server answers.
+const USER_CACHE_PREFIX = 'lumiere:log-cache:';
 
 type Mode = 'local' | 'remote';
 type Row = {
@@ -30,7 +33,16 @@ let loadGen = 0;
 // so a fetch that lands mid-insert doesn't make a fresh entry vanish.
 const pending = new Map<string, LogEntry>();
 
-const notify = () => { for (const cb of listeners) cb(); };
+// 'loading' until the current account's log has come back from the server
+// at least once. With sync configured, having no account yet also counts as
+// loading: the anonymous sign-in is still on its way, the log isn't empty.
+export type LogStatus = 'loading' | 'loaded' | 'error';
+let status: LogStatus = isSupabaseConfigured() ? 'loading' : 'loaded';
+
+const notify = () => {
+  if (mode === 'remote' && userId && status === 'loaded') writeUserCache(userId, cache);
+  for (const cb of listeners) cb();
+};
 
 function ensureInit() {
   if (initialized || typeof window === 'undefined') return;
@@ -48,6 +60,24 @@ function readLocal(): LogEntry[] {
 
 function writeLocal(list: LogEntry[]) {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); } catch {}
+}
+
+function readUserCache(uid: string): LogEntry[] | null {
+  try {
+    const raw = localStorage.getItem(USER_CACHE_PREFIX + uid);
+    return raw ? (JSON.parse(raw) as LogEntry[]) : null;
+  } catch { return null; }
+}
+
+function writeUserCache(uid: string, list: LogEntry[]) {
+  try { localStorage.setItem(USER_CACHE_PREFIX + uid, JSON.stringify(list)); } catch {}
+}
+
+/** Drop every cached account log in this browser (on sign-out). */
+export function clearLogCaches() {
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith(USER_CACHE_PREFIX)) localStorage.removeItem(k);
+  } catch {}
 }
 
 function rowToEntry(r: Row): LogEntry {
@@ -70,7 +100,10 @@ async function fetchRemote(): Promise<LogEntry[] | null> {
     .from('log_entries')
     .select('*')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    // loadWithRetry() owns retrying: postgrest's own backoff only covers
+    // 503/520 and would stack ~7s per attempt on top of ours
+    .retry(false);
   if (error) {
     console.error('[lumiere] log fetch failed', error.message);
     return null;  // keep what we have rather than blanking the log
@@ -87,12 +120,41 @@ function withPending(rows: LogEntry[]): LogEntry[] {
 }
 
 // Refetch for the current user; ignored if the user changed meanwhile.
-async function refresh(): Promise<void> {
+// Returns false when the fetch failed.
+async function refresh(): Promise<boolean> {
   const gen = loadGen;
   const rows = await fetchRemote();
-  if (gen !== loadGen || rows === null) return;
+  if (gen !== loadGen) return true;
+  if (rows === null) return false;
   cache = withPending(rows);
+  status = 'loaded';
   notify();
+  return true;
+}
+
+const RETRY_DELAYS_MS = [800, 2500];
+
+// Initial load for a user: a couple of retries before giving up, since a
+// cold Supabase project or a flaky phone connection often fails just once.
+async function loadWithRetry(gen: number): Promise<boolean> {
+  for (let attempt = 0; ; attempt++) {
+    if (await refresh()) return true;
+    if (gen !== loadGen) return false;
+    if (attempt >= RETRY_DELAYS_MS.length) break;
+    await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+    if (gen !== loadGen) return false;
+  }
+  status = 'error';
+  notify();
+  return false;
+}
+
+/** Try loading the log again after it failed. */
+export function retryLog() {
+  if (mode !== 'remote' || status === 'loading') return;
+  status = 'loading';
+  notify();
+  void loadWithRetry(loadGen);
 }
 
 // Entries logged in local mode (before sign-in finished, or before sync was
@@ -151,17 +213,21 @@ export function setBackendUser(nextUserId: string | null) {
   const gen = ++loadGen;
 
   if (mode === 'remote') {
-    // don't show another user's (or the local) log while this one loads
-    cache = [];
+    // show this account's last known log (never another user's) while the
+    // server answers; empty only if this browser has never seen it
+    cache = withPending(readUserCache(nextUserId!) ?? []);
+    status = 'loading';
     notify();
     void (async () => {
-      await refresh();
+      const ok = await loadWithRetry(gen);
       if (gen !== loadGen) return;
       setupRealtime();
-      await adoptLocalEntries(gen);
+      if (ok) await adoptLocalEntries(gen);
     })();
   } else {
     cache = readLocal();
+    // with sync configured, no user yet means sign-in is still running
+    status = sb ? 'loading' : 'loaded';
     notify();
   }
 }
@@ -188,6 +254,11 @@ function subscribe(cb: () => void): () => void {
 
 export function useLog(): LogEntry[] {
   return React.useSyncExternalStore(subscribe, snapshot, serverSnapshot);
+}
+
+/** Whether the log on screen is the real thing yet. Show "empty" only when 'loaded'. */
+export function useLogStatus(): LogStatus {
+  return React.useSyncExternalStore(subscribe, () => status, () => 'loading');
 }
 
 export function useFilmEntries(filmId: string): LogEntry[] {

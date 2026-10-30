@@ -3,7 +3,8 @@ import React from 'react';
 import Link from 'next/link';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType, LumiereVoice } from '@/app/components/lib/tokens';
-import { useLog } from '@/app/components/lib/logStore';
+import { useLog, useLogStatus } from '@/app/components/lib/logStore';
+import { LogPending } from '@/app/components/ui/LogPending';
 import { useFilmsForEntries } from '@/app/components/lib/useFilms';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import { useMyCircleFeed } from '@/app/components/lib/feedStore';
@@ -19,6 +20,7 @@ const FEED_LIMIT = 5;
 export default function HomePage() {
   const { theme: t, tweaks } = useTweaks();
   const entries = useLog();
+  const logStatus = useLogStatus();
   const rawFilms = useFilmsForEntries(entries);
   const overrides = useFilmOverrides();
   const films = React.useMemo<Record<string, Film>>(() => {
@@ -63,7 +65,7 @@ export default function HomePage() {
       </div>
 
       {entries.length === 0 ? (
-        <EmptyState t={t} />
+        logStatus === 'loaded' ? <EmptyState t={t} /> : <LogPending t={t} status={logStatus} />
       ) : (
         <>
           <div style={{ padding: '24px 20px 8px' }}>

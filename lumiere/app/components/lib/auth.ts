@@ -1,5 +1,6 @@
 'use client';
 import { getSupabase } from './supabase';
+import { clearLogCaches } from './logStore';
 
 export type AuthIntent = 'upgrade' | 'signin';
 
@@ -54,6 +55,8 @@ export async function signOut(): Promise<string | null> {
   const sb = getSupabase();
   if (!sb) return 'offline';
   const { error } = await sb.auth.signOut();
+  // don't leave the account's log copy behind on a shared device
+  if (!error) clearLogCaches();
   return error?.message ?? null;
 }
 

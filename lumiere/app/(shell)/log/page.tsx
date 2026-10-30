@@ -3,7 +3,8 @@ import React from 'react';
 import Link from 'next/link';
 import { useTweaks } from '@/app/components/TweaksProvider';
 import { LumiereType, LumiereVoice } from '@/app/components/lib/tokens';
-import { useLog, deleteEntry } from '@/app/components/lib/logStore';
+import { useLog, useLogStatus, deleteEntry } from '@/app/components/lib/logStore';
+import { LogPending } from '@/app/components/ui/LogPending';
 import type { Film, LogEntry } from '@/app/components/lib/types';
 import { useFilmOverrides, applyOverride } from '@/app/components/lib/filmOverrides';
 import { useFilmsForEntries } from '@/app/components/lib/useFilms';
@@ -13,6 +14,7 @@ import { CryMeter } from '@/app/components/ui/CryMeter';
 export default function LogPage() {
   const { theme: t, tweaks } = useTweaks();
   const entries = useLog();
+  const logStatus = useLogStatus();
   const rawFilms = useFilmsForEntries(entries);
   const overrides = useFilmOverrides();
   const films = React.useMemo<Record<string, Film>>(() => {
@@ -55,7 +57,7 @@ export default function LogPage() {
 
       <div style={{ padding: '20px' }}>
         {entries.length === 0 ? (
-          <EmptyState t={t} />
+          logStatus === 'loaded' ? <EmptyState t={t} /> : <LogPending t={t} status={logStatus} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             {entries.map(e => (
